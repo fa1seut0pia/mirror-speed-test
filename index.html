@@ -1,0 +1,1655 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>镜像测速</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='1' stop-color='%232563eb'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='4' width='56' height='56' rx='14' fill='url(%23g)'/%3E%3Cpath d='M18 38a14 14 0 0 1 28 0' fill='none' stroke='white' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='38' r='3.8' fill='white'/%3E%3Cpath d='M32 38l11-10' stroke='white' stroke-width='4.5' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; transition: background 0.2s, color 0.2s; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+
+    .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+    .header h1 { margin: 0; font-size: 24px; }
+    .header p { margin: 0; color: #94a3b8; font-size: 14px; width: 100%; }
+    .update-status { width: 100%; font-size: 12px; color: #64748b; }
+    .update-status.ok { color: #4ade80; }
+    .update-status.warn { color: #f59e0b; }
+    .update-status.fail { color: #f87171; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+    .tab-cats { margin-bottom: 8px; }
+    .tab-btn { border: 1px solid #334155; border-radius: 999px; padding: 7px 12px; background: #0f172a; color: #cbd5e1; font: 13px system-ui, sans-serif; cursor: pointer; transition: all 0.15s; }
+    .tab-btn:hover { border-color: #475569; color: #e2e8f0; }
+    .tab-btn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .tab-cat-btn { border: 1px solid #334155; border-radius: 999px; padding: 6px 10px; background: #0f172a; color: #94a3b8; font: 12px system-ui, sans-serif; cursor: pointer; transition: all 0.15s; }
+    .tab-cat-btn:hover { border-color: #475569; color: #e2e8f0; }
+    .tab-cat-btn.active { background: #334155; border-color: #475569; color: #e2e8f0; }
+
+    .theme-toggle { border: 1px solid #334155; border-radius: 999px; padding: 7px 12px; background: #0f172a; color: #cbd5e1; font: 13px system-ui, sans-serif; cursor: pointer; transition: all 0.15s; }
+    .theme-toggle:hover { border-color: #475569; color: #e2e8f0; }
+    #updateBtn { position: relative; overflow: visible; }
+    #updateBtn.has-update::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      right: 4px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #fbbf24;
+      box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.75);
+      animation: updatePulse 1.6s infinite;
+    }
+    @keyframes updatePulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.75); }
+      70% { transform: scale(1.16); box-shadow: 0 0 0 8px rgba(251, 191, 36, 0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+    }
+
+    .card { background: #1e293b; border-radius: 12px; margin-bottom: 16px; overflow: hidden; border: 1px solid #334155; transition: border-color 0.3s; }
+    .card.testing { border-color: #3b82f6; }
+    .card.done { border-color: #22c55e; }
+    .card.error { border-color: #ef4444; }
+    .card-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; cursor: default; }
+    .card-head .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(148, 163, 184, 0.14);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      line-height: 1;
+      flex: none;
+      overflow: hidden;
+    }
+    .card-head .icon img { width: 16px; height: 16px; display: block; }
+    .card-head .label { font-weight: 600; font-size: 15px; flex: 1; }
+    .card-head .summary { font-size: 13px; color: #94a3b8; }
+    .card-head .actions { display: flex; gap: 6px; }
+    .card-tip {
+      margin: 0 18px 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #94a3b8;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .btn-sm { border: 0; border-radius: 6px; padding: 5px 12px; font: 13px system-ui, sans-serif; cursor: pointer; background: #334155; color: #e2e8f0; transition: background 0.15s; }
+    .btn-sm:hover { background: #475569; }
+    .btn-sm:disabled { opacity: 0.4; cursor: wait; }
+
+    .edit-panel { display: none; padding: 0 18px 14px; }
+    .edit-panel.open { display: block; }
+    .edit-panel label { display: block; font-size: 12px; color: #94a3b8; margin: 8px 0 4px; }
+    .edit-panel textarea, .edit-panel input { width: 100%; background: #0f172a; color: #f1f5f9; border: 1px solid #334155; border-radius: 6px; padding: 8px 10px; font: 13px ui-monospace, SFMono-Regular, monospace; resize: vertical; }
+    .edit-panel textarea { min-height: 80px; }
+    .edit-row { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+    .edit-foot { margin-top: 8px; }
+    .link-btn { background: none; border: 0; color: #60a5fa; font: 12px system-ui; cursor: pointer; padding: 0; }
+    .link-btn:hover { text-decoration: underline; }
+
+    .results { padding: 0 18px 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 13px; vertical-align: top; }
+    th { color: #94a3b8; font-weight: 600; font-size: 12px; border-bottom-color: #334155; }
+    .mono { font-family: ui-monospace, SFMono-Regular, monospace; word-break: break-all; }
+    .ok { color: #4ade80; }
+    .fail { color: #f87171; }
+    .muted { color: #64748b; }
+    .speed-bar { height: 6px; border-radius: 3px; background: #334155; margin-top: 4px; overflow: hidden; }
+    .speed-fill { height: 100%; border-radius: 3px; background: #3b82f6; transition: width 0.3s; }
+    .trophy { margin-right: 4px; }
+
+    .spinner { display: none; padding: 20px 18px; text-align: center; color: #94a3b8; font-size: 14px; }
+    .spinner.show { display: block; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .spinner .dots { animation: pulse 1.2s ease-in-out infinite; }
+    .run-log { margin: 0 18px 10px; border: 1px solid #334155; border-radius: 8px; background: #0f172a; }
+    .run-log summary { cursor: pointer; list-style: none; color: #94a3b8; font-size: 12px; padding: 8px 10px; border-bottom: 1px solid #334155; }
+    .run-log summary::-webkit-details-marker { display: none; }
+    .test-log { max-height: 160px; overflow: auto; padding: 8px 10px; font: 12px ui-monospace, SFMono-Regular, monospace; line-height: 1.5; color: #cbd5e1; }
+    .test-log .line + .line { margin-top: 4px; }
+    .test-log .line.ok { color: #4ade80; }
+    .test-log .line.fail { color: #f87171; }
+    .test-log .line.info { color: #94a3b8; }
+
+    /* action panel */
+    .action-panel { padding: 12px 18px 16px; border-top: 1px solid #334155; }
+    .action-panel .act-title { font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; }
+    .act-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+    .act-row input { flex: 1; min-width: 180px; background: #0f172a; color: #f1f5f9; border: 1px solid #334155; border-radius: 6px; padding: 6px 10px; font: 13px ui-monospace, SFMono-Regular, monospace; }
+    .act-code { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px 12px; font: 12px ui-monospace, SFMono-Regular, monospace; color: #e2e8f0; white-space: pre-wrap; word-break: break-all; overflow-x: auto; max-height: 200px; overflow-y: auto; margin: 6px 0; line-height: 1.6; }
+    .act-code-wrap { position: relative; margin: 6px 0; }
+    .act-code-wrap .act-code { margin: 0; padding-right: 180px; }
+    .act-code-tools { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; opacity: 0; transform: translateX(6px); pointer-events: none; transition: opacity 0.15s, transform 0.15s; }
+    .act-code-wrap:hover .act-code-tools,
+    .act-code-wrap:focus-within .act-code-tools { opacity: 1; transform: translateX(0); pointer-events: auto; }
+    .act-code-tools .btn-copy { padding: 5px 10px; font-size: 12px; }
+    .os-switch { margin-top: 6px; }
+    .os-tabs { display: inline-flex; gap: 6px; margin: 6px 0 8px; }
+    .os-tab { border: 1px solid #334155; border-radius: 999px; padding: 4px 10px; background: #0f172a; color: #94a3b8; font: 12px system-ui, sans-serif; cursor: pointer; }
+    .os-tab.active { background: #334155; color: #e2e8f0; border-color: #475569; }
+    .os-pane { display: none; }
+    .os-pane.active { display: block; }
+    .btn-copy { border: 0; border-radius: 6px; padding: 6px 14px; font: 13px system-ui, sans-serif; cursor: pointer; background: #334155; color: #e2e8f0; transition: background 0.15s; white-space: nowrap; }
+    .btn-copy:hover { background: #475569; }
+    .btn-copy.copied { background: #166534; color: #4ade80; }
+    .btn-dl { border: 0; border-radius: 6px; padding: 6px 14px; font: 13px system-ui, sans-serif; cursor: pointer; background: #2563eb; color: white; transition: background 0.15s; white-space: nowrap; }
+    .btn-dl:hover { background: #1d4ed8; }
+
+    /* failed fold */
+    details.fail-fold { margin-top: 8px; }
+    details.fail-fold summary { cursor: pointer; color: #94a3b8; font-size: 12px; padding: 4px 0; }
+    details.fail-fold summary:hover { color: #e2e8f0; }
+
+    @media (max-width: 640px) {
+      .edit-row { grid-template-columns: 1fr; }
+      .act-row { flex-direction: column; align-items: stretch; }
+      .act-code-wrap .act-code { padding-right: 12px; padding-bottom: 56px; }
+      .act-code-tools { opacity: 1; transform: none; pointer-events: auto; top: auto; bottom: 8px; right: 8px; left: 8px; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+    }
+
+    body.theme-light {
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    body.theme-light .header p,
+    body.theme-light .update-status,
+    body.theme-light .card-head .summary,
+    body.theme-light .edit-panel label,
+    body.theme-light .spinner,
+    body.theme-light .action-panel .act-title,
+    body.theme-light details.fail-fold summary,
+    body.theme-light th { color: #475569; }
+    body.theme-light .tab-btn,
+    body.theme-light .theme-toggle,
+    body.theme-light .tab-cat-btn {
+      background: #ffffff;
+      color: #334155;
+      border-color: #cbd5e1;
+    }
+    body.theme-light .tab-btn:hover,
+    body.theme-light .theme-toggle:hover,
+    body.theme-light .tab-cat-btn:hover,
+    body.theme-light .btn-sm:hover,
+    body.theme-light .btn-copy:hover {
+      border-color: #94a3b8;
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    body.theme-light .tab-btn.active {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #fff;
+    }
+    body.theme-light .tab-cat-btn.active {
+      background: #e2e8f0;
+      border-color: #94a3b8;
+      color: #0f172a;
+    }
+    body.theme-light .card {
+      background: #ffffff;
+      border-color: #cbd5e1;
+    }
+    body.theme-light .card-tip {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+      color: #475569;
+    }
+    body.theme-light .card-head .icon {
+      background: #eef2ff;
+      border-color: #dbe2f0;
+    }
+    body.theme-light .btn-sm,
+    body.theme-light .btn-copy {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+    body.theme-light .os-tab {
+      background: #ffffff;
+      color: #475569;
+      border-color: #cbd5e1;
+    }
+    body.theme-light .os-tab.active {
+      background: #e2e8f0;
+      color: #0f172a;
+      border-color: #94a3b8;
+    }
+    body.theme-light .edit-panel textarea,
+    body.theme-light .edit-panel input,
+    body.theme-light .act-row input,
+    body.theme-light .act-code {
+      background: #f8fafc;
+      color: #0f172a;
+      border-color: #cbd5e1;
+    }
+    body.theme-light .act-code,
+    body.theme-light th,
+    body.theme-light td,
+    body.theme-light .action-panel,
+    body.theme-light .run-log,
+    body.theme-light .run-log summary {
+      border-color: #e2e8f0;
+    }
+    body.theme-light .run-log { background: #f8fafc; }
+    body.theme-light .test-log { color: #334155; }
+    body.theme-light .test-log .line.info { color: #64748b; }
+    body.theme-light .link-btn { color: #2563eb; }
+    body.theme-light details.fail-fold summary:hover { color: #0f172a; }
+    body.theme-light .muted { color: #64748b; }
+    body.theme-light .speed-bar { background: #cbd5e1; }
+    body.theme-light .ok { color: #16a34a; }
+    body.theme-light .fail { color: #dc2626; }
+    body.theme-light .btn-copy.copied { background: #dcfce7; color: #166534; }
+
+    body.theme-light code.mono[style] { color: #0f172a !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>镜像测速</h1>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button class="theme-toggle" id="updateBtn" title="检查更新">检查更新</button>
+        <button class="theme-toggle" id="clearCacheBtn">清理缓存</button>
+        <button class="theme-toggle" id="themeToggle">切换亮色</button>
+      </div>
+      <p>按类别测试 Docker、GitHub、常用开发源与 Linux 软件源镜像的延迟和下载速度</p>
+      <div class="update-status" id="updateStatus"></div>
+    </div>
+    <div id="tabCategories" class="tabs tab-cats"></div>
+    <div id="tabs" class="tabs"></div>
+    <div id="cards"></div>
+  </div>
+
+  <script>
+    let defaults = {};
+    const ALL_KINDS = [
+      'docker', 'github', 'pip', 'npm',
+      'maven', 'go', 'cargo',
+      'nuget', 'conda', 'homebrew',
+      'apt', 'yum', 'apk', 'flatpak',
+      'generic'
+    ];
+    const THEME_KEY = 'mst-theme';
+    const RESULT_CACHE_KEY = 'mst-result-cache-v1';
+    const RESULT_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+    const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
+    const TAB_LABELS = {
+      docker: 'Docker',
+      github: 'GitHub',
+      generic: '自定义源',
+      pip: 'pip',
+      npm: 'npm',
+      maven: 'Maven',
+      go: 'Go',
+      cargo: 'Cargo',
+      nuget: 'NuGet',
+      conda: 'Conda',
+      homebrew: 'Homebrew',
+      apt: 'APT',
+      yum: 'YUM/DNF',
+      apk: 'APK',
+      flatpak: 'Flatpak',
+    };
+    const TAB_CATEGORIES = [
+      { key: 'common', label: '常用', kinds: ['docker', 'github', 'pip', 'npm'] },
+      { key: 'lang', label: '开发语言', kinds: ['maven', 'go', 'cargo', 'nuget', 'conda', 'homebrew'] },
+      { key: 'linux', label: 'Linux 系统', kinds: ['apt', 'yum', 'apk', 'flatpak'] },
+      { key: 'advanced', label: '自定义', kinds: ['generic'] },
+    ];
+    let activeTab = 'docker';
+    let activeCategory = 'common';
+    // Store last test results per kind for action panels
+    const lastResults = {};
+    const activeRuns = {};
+    let updateState = null;
+
+    function setUpdateStatus(message, level = '') {
+      const el = document.getElementById('updateStatus');
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = `update-status${level ? ' ' + level : ''}`;
+    }
+
+    function syncUpdateBadgeAndTooltip(data) {
+      const btn = document.getElementById('updateBtn');
+      if (!btn || !data) return;
+      const current = data.current_version || 'unknown';
+      const latest = data.latest_version || 'unknown';
+      if (data.has_update) {
+        btn.classList.add('has-update');
+        btn.title = `发现新版本：${latest}（当前 ${current}）`;
+      } else {
+        btn.classList.remove('has-update');
+        btn.title = `当前版本：${current}`;
+      }
+    }
+
+    async function checkForUpdate(silent = false) {
+      const btn = document.getElementById('updateBtn');
+      const original = btn ? btn.textContent : '检查更新';
+      try {
+        if (btn && !silent) {
+          btn.disabled = true;
+          btn.textContent = '检查中...';
+        }
+        const resp = await fetch('/api/update');
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || '检查更新失败');
+        updateState = data;
+        syncUpdateBadgeAndTooltip(data);
+
+        const current = data.current_version || 'unknown';
+        const latest = data.latest_version || 'unknown';
+        const reason = data.download_message || data.platform_message || '';
+        if (data.has_update) {
+          if (data.can_auto_update) {
+            if (btn) btn.textContent = `更新到 ${latest}`;
+            setUpdateStatus(`发现新版本 ${latest}（当前 ${current}）`, 'warn');
+          } else if (data.can_download) {
+            if (btn) btn.textContent = `下载 ${latest}`;
+            setUpdateStatus(`发现新版本 ${latest}（当前 ${current}）`, 'warn');
+          } else {
+            if (btn) btn.textContent = '查看更新';
+            const suffix = reason ? `：${reason}` : '';
+            setUpdateStatus(`发现新版本 ${latest}（当前 ${current}）${suffix}`, 'warn');
+          }
+        } else {
+          if (btn) btn.textContent = '检查更新';
+          if (!silent) {
+            setUpdateStatus(`当前已是最新版本（${current}）`, 'ok');
+          } else {
+            setUpdateStatus('', '');
+          }
+        }
+      } catch (e) {
+        if (!silent) setUpdateStatus(`更新检查失败：${e.message || e}`, 'fail');
+        if (btn) {
+          btn.textContent = original;
+          btn.title = `更新检查失败：${e.message || e}`;
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function applyUpdate() {
+      const btn = document.getElementById('updateBtn');
+      if (!updateState || !updateState.has_update) {
+        await checkForUpdate(false);
+        return;
+      }
+      if (!updateState.can_download) {
+        const releaseUrl = updateState.release_url || updateState.release_page || 'https://github.com/fa1seut0pia/mirror-speed-test/releases';
+        window.open(releaseUrl, '_blank');
+        return;
+      }
+      const confirmText = updateState.can_auto_update
+        ? `确认更新到 ${updateState.latest_version}？更新后需要重启程序。`
+        : `确认下载 ${updateState.latest_version}？将自动选择最快 GitHub 镜像。`;
+      if (!confirm(confirmText)) return;
+      const original = btn ? btn.textContent : '更新';
+      try {
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = '更新中...';
+        }
+        const resp = await fetch('/api/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || '更新失败');
+        setUpdateStatus(data.message || '更新处理完成', 'ok');
+        if (data.open_in_browser && data.download_url) {
+          window.open(data.download_url, '_blank');
+          if (btn) btn.textContent = updateState.can_download ? `下载 ${updateState.latest_version}` : '查看更新';
+        } else if (data.restart_required) {
+          if (btn) btn.textContent = '已更新';
+        } else {
+          if (btn) btn.textContent = original;
+        }
+      } catch (e) {
+        setUpdateStatus(`更新失败：${e.message || e}`, 'fail');
+        if (btn) btn.textContent = original;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function normalizeKindName(value) {
+      const kind = String(value || '').trim().toLowerCase();
+      if (!kind) return '';
+      return ALL_KINDS.includes(kind) ? kind : '';
+    }
+
+    function resolveCategoryByKind(kind) {
+      const normalized = normalizeKindName(kind);
+      if (!normalized) return '';
+      const cat = TAB_CATEGORIES.find(item => item.kinds.includes(normalized));
+      return cat ? cat.key : '';
+    }
+
+    function applyTabFromHash() {
+      const hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+      const hashedKind = normalizeKindName(hash);
+      if (!hashedKind || !defaults[hashedKind]) return false;
+      activeTab = hashedKind;
+      const cat = resolveCategoryByKind(hashedKind);
+      if (cat) activeCategory = cat;
+      return true;
+    }
+
+    function syncHashFromActiveTab() {
+      const kind = normalizeKindName(activeTab);
+      if (!kind) return;
+      const next = '#' + kind;
+      if (window.location.hash === next) return;
+      window.history.replaceState(null, '', next);
+    }
+
+    function getVisibleKinds() {
+      return ALL_KINDS.filter(kind => Boolean(defaults[kind]));
+    }
+
+    function esc(v) {
+      return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function renderKindIcon(kindConfig) {
+      const fallbackText = String(kindConfig?.icon || '•');
+      const fallback = esc(fallbackText);
+      const iconUrl = String(kindConfig?.icon_url || '').trim();
+      if (!iconUrl) return fallback;
+      return `<img src="${esc(iconUrl)}" alt="" loading="lazy" decoding="async" onerror="this.remove();this.parentElement.textContent=${JSON.stringify(fallbackText)};" />`;
+    }
+
+    function renderPathHint(paths) {
+      const rows = [];
+      const add = (label, value, asMono = true) => {
+        if (!value) return;
+        if (asMono) {
+          rows.push(`${esc(label)}：<span class="mono">${esc(value)}</span>`);
+        } else {
+          rows.push(`${esc(label)}：${esc(value)}`);
+        }
+      };
+
+      const platformEntries = [
+        ['Linux', paths?.linux],
+        ['macOS', paths?.macos],
+        ['Windows', paths?.windows],
+      ].filter(([, value]) => Boolean(value));
+
+      const groups = [];
+      platformEntries.forEach(([label, value]) => {
+        const hit = groups.find(g => g.value === value);
+        if (hit) {
+          hit.labels.push(label);
+        } else {
+          groups.push({ value, labels: [label] });
+        }
+      });
+
+      groups.forEach(group => {
+        add(group.labels.join('/'), group.value);
+      });
+
+      add('项目', paths?.project);
+      add('说明', paths?.note, false);
+      if (!rows.length) return '';
+      return `<div class="muted" style="font-size:12px;line-height:1.55">${rows.join('<br>')}</div>`;
+    }
+
+    function renderSystemCommandTabs(unixCode, windowsCode, unixCopyLabel = '复制 Linux/macOS 命令', windowsCopyLabel = '复制 Windows 命令') {
+      return `
+        <div class="os-switch">
+          <div class="os-tabs">
+            <button class="os-tab active" type="button" data-os="unix">Linux/macOS</button>
+            <button class="os-tab" type="button" data-os="windows">Windows</button>
+          </div>
+          <div class="os-pane active" data-os-pane="unix">
+            <div class="act-code">${esc(unixCode)}</div>
+            <button class="btn-copy" onclick="copyText(this.previousElementSibling.textContent, this)">${esc(unixCopyLabel)}</button>
+          </div>
+          <div class="os-pane" data-os-pane="windows">
+            <div class="act-code">${esc(windowsCode)}</div>
+            <button class="btn-copy" onclick="copyText(this.previousElementSibling.textContent, this)">${esc(windowsCopyLabel)}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function initSystemCommandTabs(root) {
+      if (!root) return;
+      root.querySelectorAll('.os-switch').forEach(sw => {
+        if (sw.dataset.bound === '1') return;
+        sw.dataset.bound = '1';
+        const tabs = Array.from(sw.querySelectorAll('.os-tab'));
+        const panes = Array.from(sw.querySelectorAll('.os-pane'));
+        const setActive = (os) => {
+          tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.os === os));
+          panes.forEach(pane => pane.classList.toggle('active', pane.dataset.osPane === os));
+        };
+        tabs.forEach(tab => tab.addEventListener('click', () => setActive(tab.dataset.os)));
+        setActive('unix');
+      });
+    }
+
+    function attachCopyButtons(root) {
+      if (!root) return;
+      root.querySelectorAll('.act-code').forEach(codeEl => {
+        if (codeEl.parentElement?.classList.contains('act-code-wrap')) return;
+        const parent = codeEl.parentElement;
+        if (!parent) return;
+
+        const copyButtons = [];
+        let cursor = codeEl.nextElementSibling;
+        while (cursor && cursor.classList && cursor.classList.contains('btn-copy')) {
+          copyButtons.push(cursor);
+          cursor = cursor.nextElementSibling;
+        }
+        if (!copyButtons.length) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'act-code-wrap';
+        const tools = document.createElement('div');
+        tools.className = 'act-code-tools';
+
+        parent.insertBefore(wrap, codeEl);
+        wrap.appendChild(codeEl);
+        wrap.appendChild(tools);
+        copyButtons.forEach(btn => {
+          btn.style.marginLeft = '0';
+          tools.appendChild(btn);
+        });
+      });
+    }
+
+    /* ── clipboard ── */
+    function copyText(text, btnEl) {
+      navigator.clipboard.writeText(text).then(() => {
+        if (!btnEl) return;
+        const orig = btnEl.textContent;
+        btnEl.textContent = '已复制';
+        btnEl.classList.add('copied');
+        setTimeout(() => { btnEl.textContent = orig; btnEl.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    /* ── theme ── */
+    function getInitialTheme() {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'light' || saved === 'dark') return saved;
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+
+    function applyTheme(theme) {
+      const body = document.body;
+      body.classList.toggle('theme-light', theme === 'light');
+      body.classList.toggle('theme-dark', theme !== 'light');
+      const btn = document.getElementById('themeToggle');
+      if (btn) btn.textContent = theme === 'light' ? '切换暗色' : '切换亮色';
+    }
+
+    function loadResultCache() {
+      try {
+        const raw = localStorage.getItem(RESULT_CACHE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return {};
+
+        const now = Date.now();
+        const cache = {};
+        for (const kind of Object.keys(parsed)) {
+          const entry = parsed[kind];
+          if (!entry || typeof entry !== 'object') continue;
+          if (!entry.saved_at || now - Number(entry.saved_at) > RESULT_CACHE_TTL_MS) continue;
+          if (!entry.payload || !Array.isArray(entry.payload.results)) continue;
+          cache[kind] = entry;
+        }
+
+        if (Object.keys(cache).length !== Object.keys(parsed).length) {
+          localStorage.setItem(RESULT_CACHE_KEY, JSON.stringify(cache));
+        }
+        return cache;
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function saveResultCache(kind, payload) {
+      try {
+        const cache = loadResultCache();
+        cache[kind] = {
+          saved_at: Date.now(),
+          payload,
+        };
+        localStorage.setItem(RESULT_CACHE_KEY, JSON.stringify(cache));
+      } catch (_) {
+      }
+    }
+
+    function clearResultCache(clearUi = true) {
+      try {
+        localStorage.removeItem(RESULT_CACHE_KEY);
+      } catch (_) {
+      }
+      if (!clearUi) return;
+      for (const kind of ALL_KINDS) {
+        const card = document.getElementById('card-' + kind);
+        if (card && !card.classList.contains('testing')) {
+          card.className = 'card';
+        }
+        const summary = document.getElementById('summary-' + kind);
+        if (summary) summary.textContent = '';
+        const results = document.getElementById('res-' + kind);
+        if (results) results.innerHTML = '';
+        const actions = document.getElementById('actions-' + kind);
+        if (actions) actions.innerHTML = '';
+      }
+    }
+
+    function hydrateCachedResults() {
+      const cache = loadResultCache();
+      for (const kind of ALL_KINDS) {
+        const entry = cache[kind];
+        if (!entry || !entry.payload) continue;
+        const card = document.getElementById('card-' + kind);
+        if (!card) continue;
+        renderResults(kind, entry.payload, { fromCache: true, savedAt: Number(entry.saved_at) });
+        card.className = 'card done';
+      }
+    }
+
+    function formatCacheAge(ageMs) {
+      if (!Number.isFinite(ageMs) || ageMs < 0) return '刚刚';
+      const minutes = Math.floor(ageMs / 60000);
+      if (minutes < 1) return '刚刚';
+      if (minutes < 60) return `${minutes} 分钟前`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours} 小时前`;
+      const days = Math.floor(hours / 24);
+      return `${days} 天前`;
+    }
+
+    function formatElapsedMs(ms) {
+      if (!Number.isFinite(ms) || ms < 0) return '';
+      if (ms < 1000) return `${Math.round(ms)} ms`;
+      const seconds = ms / 1000;
+      if (seconds < 60) return `${seconds.toFixed(2)} s`;
+      const minutes = Math.floor(seconds / 60);
+      return `${minutes}m ${(seconds % 60).toFixed(1)}s`;
+    }
+
+    function formatLogTime(ts = Date.now()) {
+      const d = new Date(ts);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function clearProgressLog(kind) {
+      const logEl = document.getElementById('log-' + kind);
+      if (!logEl) return;
+      logEl.innerHTML = '';
+    }
+
+    function appendProgressLog(kind, message, level = 'info') {
+      const logEl = document.getElementById('log-' + kind);
+      if (!logEl) return;
+      const line = document.createElement('div');
+      line.className = `line ${level}`;
+      line.textContent = `[${formatLogTime()}] ${message}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    /* ── init ── */
+    function initCards(data) {
+      defaults = JSON.parse(JSON.stringify(data));
+      applyTabFromHash();
+      const container = document.getElementById('cards');
+      container.innerHTML = '';
+      for (const kind of ALL_KINDS) {
+        const c = data[kind];
+        if (!c) continue;
+        container.innerHTML += `
+          <div class="card" id="card-${kind}" data-kind="${kind}">
+            <div class="card-head">
+              <span class="icon">${renderKindIcon(c)}</span>
+              <span class="label">${esc(c.label)}</span>
+              <span class="summary" id="summary-${kind}"></span>
+              <span class="actions">
+                <button class="btn-sm btn-edit" onclick="toggleEdit('${kind}')">编辑</button>
+                <button class="btn-sm" id="retest-${kind}" onclick="testOne('${kind}')">重测</button>
+              </span>
+            </div>
+            ${c.tip ? `<div class="card-tip">${esc(c.tip)}</div>` : ''}
+            <div class="edit-panel" id="edit-${kind}">
+              <label>镜像地址（每行一个）</label>
+              <textarea id="mirrors-${kind}">${esc(c.mirrors.join('\n'))}</textarea>
+              <div class="muted" style="font-size:12px;margin-top:6px" id="disabled-${kind}"></div>
+              <div class="edit-row">
+                <div><label>测试目标</label><input id="target-${kind}" value="${esc(c.target)}" /></div>
+                <div><label>下载大小 (MB)</label><input id="mb-${kind}" type="number" min="1" max="200" value="${c.sample_mb}" /></div>
+              </div>
+              <div class="edit-foot">
+                <button class="link-btn" onclick="resetKind('${kind}')">恢复默认</button>
+                <button class="link-btn" style="margin-left:12px" onclick="clearDisabledMirrors('${kind}')">清空禁用</button>
+              </div>
+            </div>
+            <div class="spinner" id="spin-${kind}"><span class="dots">测速中...</span></div>
+            <details class="run-log" id="logwrap-${kind}">
+              <summary>进度日志</summary>
+              <div class="test-log" id="log-${kind}"></div>
+            </details>
+            <div class="results" id="res-${kind}"></div>
+            <div id="actions-${kind}"></div>
+          </div>
+        `;
+      }
+      for (const kind of ALL_KINDS) {
+        if (!defaults[kind]) continue;
+        if (!Array.isArray(defaults[kind].disabled_mirrors)) defaults[kind].disabled_mirrors = [];
+        updateDisabledInfo(kind);
+      }
+      initTabs();
+      applyTabFilter();
+      hydrateCachedResults();
+    }
+
+    function initTabs() {
+      const categoriesEl = document.getElementById('tabCategories');
+      const tabsEl = document.getElementById('tabs');
+      const availableKinds = getVisibleKinds();
+      if (!availableKinds.length) {
+        categoriesEl.innerHTML = '';
+        tabsEl.innerHTML = '';
+        return;
+      }
+
+      const categories = TAB_CATEGORIES
+        .map(cat => ({ ...cat, availableKinds: cat.kinds.filter(kind => availableKinds.includes(kind)) }))
+        .filter(cat => cat.availableKinds.length);
+      if (!categories.length) {
+        categoriesEl.innerHTML = '';
+        tabsEl.innerHTML = '';
+        return;
+      }
+
+      if (!categories.some(cat => cat.key === activeCategory)) {
+        activeCategory = categories[0].key;
+      }
+      const activeCategoryDef = categories.find(cat => cat.key === activeCategory) || categories[0];
+      const tabKeys = activeCategoryDef.availableKinds;
+      if (!tabKeys.includes(activeTab)) {
+        activeTab = tabKeys[0];
+      }
+      syncHashFromActiveTab();
+
+      categoriesEl.innerHTML = categories
+        .map(cat => `<button class="tab-cat-btn${cat.key === activeCategory ? ' active' : ''}" data-cat="${cat.key}">${esc(cat.label)}</button>`)
+        .join('');
+      categoriesEl.onclick = (e) => {
+        const btn = e.target.closest('.tab-cat-btn');
+        if (!btn) return;
+        const nextCategory = btn.dataset.cat;
+        if (!nextCategory || nextCategory === activeCategory) return;
+        activeCategory = nextCategory;
+        initTabs();
+        applyTabFilter();
+      };
+
+      tabsEl.innerHTML = tabKeys
+        .map(key => `<button class="tab-btn${key === activeTab ? ' active' : ''}" data-tab="${key}">${esc(TAB_LABELS[key] || key)}</button>`)
+        .join('');
+      tabsEl.onclick = (e) => {
+        const btn = e.target.closest('.tab-btn');
+        if (!btn) return;
+        activeTab = btn.dataset.tab;
+        syncHashFromActiveTab();
+        tabsEl.querySelectorAll('.tab-btn').forEach(el => el.classList.toggle('active', el.dataset.tab === activeTab));
+        applyTabFilter();
+      };
+    }
+
+    function applyTabFilter() {
+      const visibleKinds = new Set(getVisibleKinds());
+      if (!visibleKinds.has(activeTab)) {
+        const first = getVisibleKinds()[0];
+        if (!first) return;
+        activeTab = first;
+        const fallbackCategory = TAB_CATEGORIES.find(cat => cat.kinds.includes(first));
+        if (fallbackCategory) activeCategory = fallbackCategory.key;
+        initTabs();
+      }
+      const cards = document.querySelectorAll('#cards .card');
+      cards.forEach(card => {
+        const kind = card.dataset.kind;
+        if (!visibleKinds.has(kind)) {
+          card.style.display = 'none';
+          return;
+        }
+        card.style.display = (activeTab === kind) ? '' : 'none';
+      });
+    }
+
+    function toggleEdit(kind) {
+      const panel = document.getElementById('edit-' + kind);
+      const isOpen = panel.classList.toggle('open');
+      const card = document.getElementById('card-' + kind);
+      card.querySelector('.btn-edit').textContent = isOpen ? '收起' : '编辑';
+    }
+
+    function resetKind(kind) {
+      const d = defaults[kind];
+      document.getElementById('mirrors-' + kind).value = d.mirrors.join('\n');
+      document.getElementById('target-' + kind).value = d.target;
+      document.getElementById('mb-' + kind).value = d.sample_mb;
+    }
+
+    function readConfig(kind) {
+      return {
+        mirrors: document.getElementById('mirrors-' + kind).value
+          .split('\n')
+          .map(s => s.trim())
+          .filter(Boolean),
+        disabled_mirrors: Array.from(new Set(
+          ((defaults[kind] && defaults[kind].disabled_mirrors) || [])
+            .map(normalizeMirrorValue)
+            .filter(Boolean)
+        )),
+        target: document.getElementById('target-' + kind).value.trim(),
+        sample_mb: Number(document.getElementById('mb-' + kind).value) || defaults[kind].sample_mb,
+      };
+    }
+
+    function normalizeMirrorValue(value) {
+      return String(value || '').trim().replace(/\/+$/, '');
+    }
+
+    function updateDisabledInfo(kind) {
+      const el = document.getElementById('disabled-' + kind);
+      if (!el) return;
+      const count = ((defaults[kind] && defaults[kind].disabled_mirrors) || []).length;
+      el.textContent = count > 0 ? `已禁用 ${count} 个镜像（重测会跳过）` : '当前无禁用镜像';
+    }
+
+    function disableMirror(kind, mirror, btn) {
+      if (!defaults[kind]) return;
+      const key = normalizeMirrorValue(mirror);
+      const current = ((defaults[kind].disabled_mirrors || []).map(normalizeMirrorValue));
+      if (current.includes(key)) return;
+      defaults[kind].disabled_mirrors = Array.from(new Set([...current, key]));
+      updateDisabledInfo(kind);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '已禁用';
+      }
+    }
+
+    function clearDisabledMirrors(kind) {
+      if (!defaults[kind]) return;
+      defaults[kind].disabled_mirrors = [];
+      updateDisabledInfo(kind);
+      if (Array.isArray(lastResults[kind]) && lastResults[kind].length) {
+        renderResults(kind, { results: lastResults[kind] });
+      }
+    }
+
+    /* ── GitHub URL helper (mirrors frontend render_mirror_target) ── */
+    function renderGithubUrl(mirror, target) {
+      mirror = mirror.replace(/\/+$/, '');
+      if (/^https?:\/\//i.test(mirror) && /^https?:\/\//i.test(target)) {
+        try {
+          const m = new URL(mirror);
+          const t = new URL(target);
+          if (m.host.toLowerCase() === t.host.toLowerCase() && !m.pathname.replace(/^\/+|\/+$/g, '')) {
+            return target;
+          }
+        } catch (_) {
+        }
+      }
+      if (mirror.includes('{url}') || mirror.includes('{path}')) {
+        const parsed = new URL(target);
+        const path = parsed.host + parsed.pathname + (parsed.search || '');
+        return mirror.replace('{url}', target).replace('{path}', path);
+      }
+      return mirror + '/' + target;
+    }
+
+    function renderNugetIndexUrl(mirror) {
+      const m = mirror.replace(/\/+$/, '');
+      if (m.endsWith('/v3/index.json') || m.endsWith('.json')) return m;
+      if (m.endsWith('/v3')) return m + '/index.json';
+      return m + '/v3/index.json';
+    }
+
+    function normalizeGitRepoTarget(target) {
+      let t = String(target || '').trim();
+      if (!t) return '';
+      if (/^https?:\/\//i.test(t)) {
+        try {
+          const u = new URL(t);
+          t = u.pathname.replace(/^\/+/, '');
+        } catch (_) {
+        }
+      }
+      t = t.replace(/\/+$/, '').replace(/\.git$/i, '');
+      return t;
+    }
+
+    function buildGithubCloneProxyUrl(mirror, repoTarget) {
+      const repo = normalizeGitRepoTarget(repoTarget);
+      if (!repo) return '';
+      const direct = `https://github.com/${repo}.git`;
+      return renderGithubUrl(mirror, direct);
+    }
+
+    /* ── action panels per kind ── */
+    function renderActions(kind, results) {
+      const el = document.getElementById('actions-' + kind);
+      const okResults = results.filter(r => r.ok);
+      if (!okResults.length) { el.innerHTML = ''; return; }
+
+      if (kind === 'docker') {
+        const top5 = okResults.slice(0, 5).map(r => r.mirror);
+        const daemonJson = JSON.stringify({"registry-mirrors": top5}, null, 2);
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 Docker daemon.json（前 ${top5.length} 名）</div>
+            ${renderPathHint({
+              linux: '/etc/docker/daemon.json',
+              macos: 'Docker Desktop 设置 -> Docker Engine',
+              windows: 'C:\\ProgramData\\docker\\config\\daemon.json'
+            })}
+            <div class="act-code" id="daemon-json">${esc(daemonJson)}</div>
+            <button class="btn-copy" onclick="copyText(document.getElementById('daemon-json').textContent, this)">复制 JSON</button>
+            <div style="margin-top:14px">
+              <div class="act-title">生成 docker pull 命令</div>
+              <div class="act-row">
+                <input id="docker-image-input" placeholder="输入镜像名，如 nginx:latest" value="" />
+              </div>
+              <div id="docker-pull-cmds"></div>
+            </div>
+          </div>
+        `;
+        const imgInput = document.getElementById('docker-image-input');
+        const cmdsEl = document.getElementById('docker-pull-cmds');
+        const updatePullCmds = () => {
+          const img = imgInput.value.trim();
+          if (!img) { cmdsEl.innerHTML = ''; return; }
+          let html = '';
+          top5.forEach((m, i) => {
+            const cmd = `docker pull ${m.replace(/^https?:\/\//, '')}/${img}`;
+            html += `<div class="act-row" style="margin-top:4px">
+              <code class="mono" style="flex:1;font-size:12px;color:#e2e8f0">${esc(cmd)}</code>
+              <button class="btn-copy" onclick="copyText('${cmd.replace(/'/g,"\\'")}', this)">复制</button>
+            </div>`;
+          });
+          cmdsEl.innerHTML = html;
+        };
+        imgInput.addEventListener('input', updatePullCmds);
+      }
+
+      else if (kind === 'github') {
+        const fastest = okResults[0];
+        const target = document.getElementById('target-github').value.trim();
+        const defaultRepo = (defaults.git && defaults.git.target) ? defaults.git.target : 'owner/repo';
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">通过最快代理下载</div>
+            <div class="act-row">
+              <input id="github-dl-url" value="${esc(target)}" placeholder="GitHub Release 文件 URL" />
+              <button class="btn-dl" id="github-dl-btn">下载</button>
+            </div>
+            <div style="margin-top:14px">
+              <div class="act-title">通过最快代理 Clone</div>
+              <div class="act-row">
+                <input id="github-clone-repo" value="${esc(defaultRepo)}" placeholder="owner/repo 或仓库 URL" />
+              </div>
+              <div id="github-clone-cmds"></div>
+            </div>
+          </div>
+        `;
+        const dlBtn = document.getElementById('github-dl-btn');
+        dlBtn.addEventListener('click', () => {
+          const url = document.getElementById('github-dl-url').value.trim();
+          if (!url) return;
+          const dlUrl = renderGithubUrl(fastest.mirror, url);
+          window.open(dlUrl, '_blank');
+        });
+
+        const repoInput = document.getElementById('github-clone-repo');
+        const cloneCmdsEl = document.getElementById('github-clone-cmds');
+        const updateCloneCmds = () => {
+          const repoVal = repoInput.value.trim();
+          const repo = normalizeGitRepoTarget(repoVal);
+          if (!repo) {
+            cloneCmdsEl.innerHTML = `<div class="muted" style="font-size:12px">请输入 owner/repo 或完整仓库 URL</div>`;
+            return;
+          }
+          const proxyUrl = buildGithubCloneProxyUrl(fastest.mirror, repo);
+          const directUrl = `https://github.com/${repo}.git`;
+          const cmd1 = `git clone ${proxyUrl}`;
+          const cmd2 = `git clone ${directUrl}`;
+          cloneCmdsEl.innerHTML = `
+            <div class="act-row" style="margin-top:4px">
+              <code class="mono" style="flex:1;font-size:12px;color:#e2e8f0">${esc(cmd1)}</code>
+              <button class="btn-copy" data-copy-cmd="${esc(cmd1)}">复制</button>
+            </div>
+            <div class="act-row" style="margin-top:4px">
+              <code class="mono" style="flex:1;font-size:12px;color:#e2e8f0">${esc(cmd2)}</code>
+              <button class="btn-copy" data-copy-cmd="${esc(cmd2)}">复制</button>
+            </div>
+          `;
+          cloneCmdsEl.querySelectorAll('button[data-copy-cmd]').forEach((btn) => {
+            btn.addEventListener('click', () => copyText(btn.dataset.copyCmd || '', btn));
+          });
+        };
+        repoInput.addEventListener('input', updateCloneCmds);
+        updateCloneCmds();
+      }
+
+      else if (kind === 'pip') {
+        const fastest = okResults[0];
+        const pipTempCmd = `pip install -i ${fastest.mirror}/simple <package>`;
+        const pipPermCmd = `pip config set global.index-url ${fastest.mirror}/simple`;
+        const uvTempBash = `export UV_INDEX_URL=${fastest.mirror}/simple`;
+        const uvTempPwsh = `$env:UV_INDEX_URL='${fastest.mirror}/simple'`;
+        const uvPermBash = `echo 'export UV_INDEX_URL=${fastest.mirror}/simple' >> ~/.zshrc\necho 'export UV_INDEX_URL=${fastest.mirror}/simple' >> ~/.bashrc`;
+        const uvPermPwsh = `if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force > $null }\nAdd-Content -Path $PROFILE -Value '$env:UV_INDEX_URL="${fastest.mirror}/simple"'`;
+        const uvToml = `[tool.uv]\nindex-url = "${fastest.mirror}/simple"`;
+        const uvUnixCode = `# 临时（当前 shell）\n${uvTempBash}\n\n# 永久（写入 shell 配置）\n${uvPermBash}\n\n# 项目级（永久）\n${uvToml}`;
+        const uvWindowsCode = `# 临时（当前 PowerShell 会话）\n${uvTempPwsh}\n\n# 永久（写入 $PROFILE）\n${uvPermPwsh}\n\n# 项目级（永久）\n${uvToml}`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 pip 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '~/.config/pip/pip.conf',
+              macos: '~/.config/pip/pip.conf',
+              windows: '%APPDATA%\\pip\\pip.ini',
+              note: 'pip install -i 为临时；pip config set 为永久'
+            })}
+            <div class="act-code"># 临时（当前命令）\n${esc(pipTempCmd)}\n\n# 永久（写入 pip 配置）\n${esc(pipPermCmd)}</div>
+            <button class="btn-copy" onclick="copyText(\`${pipTempCmd}\`, this)">复制临时 pip 命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${pipPermCmd}\`, this)">复制永久 pip 命令</button>
+            <div style="margin-top:14px">
+              <div class="act-title">配置 uv 使用最快镜像</div>
+              ${renderPathHint({
+                project: 'pyproject.toml',
+                linux: '~/.zshrc 或 ~/.bashrc（永久）',
+                macos: '~/.zshrc（永久）',
+                windows: '$PROFILE（永久）',
+                note: '点击 Linux/macOS 或 Windows 标签查看对应命令'
+              })}
+              ${renderSystemCommandTabs(uvUnixCode, uvWindowsCode, '复制 Linux/macOS uv 配置', '复制 Windows uv 配置')}
+            </div>
+          </div>
+        `;
+      }
+
+      else if (kind === 'npm') {
+        const fastest = okResults[0];
+        const tempCmd = `npm --registry ${fastest.mirror} install <package>`;
+        const permGlobalCmd = `npm config set registry ${fastest.mirror}`;
+        const permProjectCmd = `npm config set registry ${fastest.mirror} --location=project`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 npm 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '~/.npmrc',
+              macos: '~/.npmrc',
+              windows: '%USERPROFILE%\\.npmrc',
+              project: '.npmrc',
+              note: 'npm --registry 为临时；npm config set 为永久'
+            })}
+            <div class="act-code"># 临时（当前命令）\n${esc(tempCmd)}\n\n# 永久（全局）\n${esc(permGlobalCmd)}\n\n# 永久（项目级）\n${esc(permProjectCmd)}</div>
+            <button class="btn-copy" onclick="copyText(\`${tempCmd}\`, this)">复制临时 npm 命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permGlobalCmd}\`, this)">复制永久全局命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permProjectCmd}\`, this)">复制永久项目命令</button>
+          </div>
+        `;
+      }
+
+      else if (kind === 'maven') {
+        const fastest = okResults[0];
+        const mirrorId = 'fastest-maven';
+        const settingsXml = `<settings>\n  <mirrors>\n    <mirror>\n      <id>${mirrorId}</id>\n      <name>Fastest Maven Mirror</name>\n      <url>${fastest.mirror}</url>\n      <mirrorOf>*</mirrorOf>\n    </mirror>\n  </mirrors>\n</settings>`;
+        const gradleGroovy = `repositories {\n  maven { url '${fastest.mirror}' }\n  mavenCentral()\n}`;
+        const gradleKts = `repositories {\n  maven(url = \"${fastest.mirror}\")\n  mavenCentral()\n}`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 Maven / Gradle 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '~/.m2/settings.xml',
+              macos: '~/.m2/settings.xml',
+              windows: '%USERPROFILE%\\.m2\\settings.xml',
+              note: '该方式为永久配置（写入文件）'
+            })}
+            <div class="act-code">${esc(settingsXml)}</div>
+            <button class="btn-copy" onclick="copyText(\`${settingsXml}\`, this)">复制永久 settings.xml</button>
+            <div style="margin-top:14px">
+              <div class="act-title">Gradle (Groovy DSL)</div>
+              ${renderPathHint({
+                linux: '~/.gradle/init.gradle',
+                macos: '~/.gradle/init.gradle',
+                windows: '%USERPROFILE%\\.gradle\\init.gradle',
+                project: 'build.gradle',
+                note: '该方式为永久配置（写入文件）'
+              })}
+              <div class="act-code">${esc(gradleGroovy)}</div>
+              <button class="btn-copy" onclick="copyText(\`${gradleGroovy}\`, this)">复制永久 Groovy 配置</button>
+            </div>
+            <div style="margin-top:14px">
+              <div class="act-title">Gradle (Kotlin DSL)</div>
+              ${renderPathHint({
+                linux: '~/.gradle/init.gradle.kts',
+                macos: '~/.gradle/init.gradle.kts',
+                windows: '%USERPROFILE%\\.gradle\\init.gradle.kts',
+                project: 'build.gradle.kts',
+                note: '该方式为永久配置（写入文件）'
+              })}
+              <div class="act-code">${esc(gradleKts)}</div>
+              <button class="btn-copy" onclick="copyText(\`${gradleKts}\`, this)">复制永久 Kotlin 配置</button>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (kind === 'go') {
+        const fastest = okResults[0];
+        const tempBashCmd = `export GOPROXY=${fastest.mirror},direct`;
+        const tempPwshCmd = `$env:GOPROXY='${fastest.mirror},direct'`;
+        const permCmd = `go env -w GOPROXY=${fastest.mirror},direct`;
+        const unixCode = `# 临时（当前 shell）\n${tempBashCmd}\n\n# 永久（写入 go env）\n${permCmd}`;
+        const windowsCode = `# 临时（当前 PowerShell 会话）\n${tempPwshCmd}\n\n# 永久（写入 go env）\n${permCmd}`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 Go 使用最快代理</div>
+            ${renderPathHint({
+              linux: '~/.config/go/env',
+              macos: '~/.config/go/env',
+              windows: '%APPDATA%\\go\\env',
+              note: '点击 Linux/macOS 或 Windows 标签查看对应命令；go env -w 为永久'
+            })}
+            ${renderSystemCommandTabs(unixCode, windowsCode, '复制 Linux/macOS Go 配置', '复制 Windows Go 配置')}
+          </div>
+        `;
+      }
+
+      else if (kind === 'cargo') {
+        const fastest = okResults[0];
+        const base = fastest.mirror.replace(/\/+$/, '');
+        const cargoToml = `[source.crates-io]\nreplace-with = "fastest"\n\n[source.fastest]\nregistry = "sparse+${base}/index/"`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 Cargo 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '~/.cargo/config.toml',
+              macos: '~/.cargo/config.toml',
+              windows: '%USERPROFILE%\\.cargo\\config.toml',
+              note: '该方式为永久配置（写入文件）'
+            })}
+            <div class="act-code">${esc(cargoToml)}</div>
+            <button class="btn-copy" onclick="copyText(\`${cargoToml}\`, this)">复制永久 .cargo/config.toml</button>
+          </div>
+        `;
+      }
+
+      else if (kind === 'nuget') {
+        const fastest = okResults[0];
+        const idx = renderNugetIndexUrl(fastest.mirror);
+        const tempCmd = `dotnet restore --source ${idx}`;
+        const permCmd = `dotnet nuget add source ${idx} -n fastest-nuget`;
+        const cfg = `<configuration>\n  <packageSources>\n    <add key="fastest-nuget" value="${idx}" />\n  </packageSources>\n</configuration>`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 NuGet 使用最快源</div>
+            ${renderPathHint({
+              linux: '~/.nuget/NuGet/NuGet.Config',
+              macos: '~/.nuget/NuGet/NuGet.Config',
+              windows: '%AppData%\\NuGet\\NuGet.Config',
+              note: 'dotnet restore --source 为临时；dotnet nuget add source / NuGet.Config 为永久'
+            })}
+            <div class="act-code"># 临时（当前 restore）\n${esc(tempCmd)}\n\n# 永久（写入 NuGet 源）\n${esc(permCmd)}</div>
+            <button class="btn-copy" onclick="copyText(\`${tempCmd}\`, this)">复制临时 restore 命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permCmd}\`, this)">复制永久 dotnet 命令</button>
+            <div style="margin-top:14px">
+              <div class="act-title">NuGet.Config 片段（永久）</div>
+              <div class="act-code">${esc(cfg)}</div>
+              <button class="btn-copy" onclick="copyText(\`${cfg}\`, this)">复制永久 NuGet.Config XML</button>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (kind === 'conda') {
+        const fastest = okResults[0];
+        const base = fastest.mirror.replace(/\/+$/, '');
+        const tempCmd = `conda install -c ${base}/pkgs/main -c ${base}/pkgs/r <package>`;
+        const permCmdMain = `conda config --add default_channels ${base}/pkgs/main`;
+        const permCmdR = `conda config --add default_channels ${base}/pkgs/r`;
+        const condarc = `default_channels:\n  - ${base}/pkgs/main\n  - ${base}/pkgs/r\nshow_channel_urls: true`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 Conda 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '~/.condarc',
+              macos: '~/.condarc',
+              windows: '%USERPROFILE%\\.condarc',
+              note: 'conda install -c 为临时；conda config / .condarc 为永久'
+            })}
+            <div class="act-code"># 临时（当前安装命令）\n${esc(tempCmd)}\n\n# 永久（写入 conda 配置）\n${esc(permCmdMain)}\n${esc(permCmdR)}</div>
+            <button class="btn-copy" onclick="copyText(\`${tempCmd}\`, this)">复制临时 conda 命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permCmdMain}\n${permCmdR}\`, this)">复制永久 conda 命令</button>
+            <div style="margin-top:14px">
+              <div class="act-title">.condarc 片段（永久）</div>
+              <div class="act-code">${esc(condarc)}</div>
+              <button class="btn-copy" onclick="copyText(\`${condarc}\`, this)">复制永久 .condarc</button>
+            </div>
+          </div>
+        `;
+      }
+
+      else if (kind === 'homebrew') {
+        const fastest = okResults[0];
+        const base = fastest.mirror.replace(/\/+$/, '');
+        const tempBashCmd = `export HOMEBREW_BOTTLE_DOMAIN=${base}\nexport HOMEBREW_API_DOMAIN=${base}`;
+        const tempPwshCmd = `$env:HOMEBREW_BOTTLE_DOMAIN='${base}'\n$env:HOMEBREW_API_DOMAIN='${base}'`;
+        const permBashCmd = `echo 'export HOMEBREW_BOTTLE_DOMAIN=${base}' >> ~/.zshrc\necho 'export HOMEBREW_API_DOMAIN=${base}' >> ~/.zshrc\necho 'export HOMEBREW_BOTTLE_DOMAIN=${base}' >> ~/.bashrc\necho 'export HOMEBREW_API_DOMAIN=${base}' >> ~/.bashrc`;
+        const permPwshCmd = `if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force > $null }\nAdd-Content -Path $PROFILE -Value '$env:HOMEBREW_BOTTLE_DOMAIN="${base}"'\nAdd-Content -Path $PROFILE -Value '$env:HOMEBREW_API_DOMAIN="${base}"'`;
+        const unixCode = `# 临时（当前 shell）\n${tempBashCmd}\n\n# 永久（写入 shell 配置）\n${permBashCmd}`;
+        const windowsCode = `# 临时（当前 PowerShell 会话）\n${tempPwshCmd}\n\n# 永久（写入 $PROFILE）\n${permPwshCmd}`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 Homebrew 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '~/.bashrc',
+              macos: '~/.zshrc',
+              windows: '$PROFILE',
+              note: '点击 Linux/macOS 或 Windows 标签查看对应命令'
+            })}
+            ${renderSystemCommandTabs(unixCode, windowsCode, '复制 Linux/macOS Homebrew 配置', '复制 Windows Homebrew 配置')}
+          </div>
+        `;
+      }
+
+      else if (kind === 'flatpak') {
+        const fastest = okResults[0];
+        const base = fastest.mirror.replace(/\/+$/, '');
+        const repoUrl = `${base}/repo`;
+        const addCmd = `flatpak remote-add --if-not-exists flathub ${repoUrl}`;
+        const modifyCmd = `flatpak remote-modify --url=${repoUrl} flathub`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 Flatpak 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '/var/lib/flatpak/repo/config（系统级）',
+              project: '~/.local/share/flatpak/repo/config（用户级）',
+              note: 'Flatpak 主要用于 Linux；该方式为永久配置'
+            })}
+            <div class="act-code">${esc(addCmd)}\n${esc(modifyCmd)}</div>
+            <button class="btn-copy" onclick="copyText(\`${addCmd}\n${modifyCmd}\`, this)">复制永久配置命令</button>
+          </div>
+        `;
+      }
+
+      else if (kind === 'apt') {
+        const fastest = okResults[0];
+        const base = fastest.mirror.replace(/\/+$/, '');
+        const line = `deb ${base}/ubuntu noble main restricted universe multiverse`;
+        const cmd = `sudo sed -i 's|http://archive.ubuntu.com/ubuntu|${base}/ubuntu|g' /etc/apt/sources.list && sudo apt update`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 APT 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '/etc/apt/sources.list 或 /etc/apt/sources.list.d/*.list',
+              note: 'APT 仅适用于 Debian/Ubuntu 系 Linux；该方式为永久配置'
+            })}
+            <div class="act-code">${esc(line)}\n\n${esc(cmd)}</div>
+            <button class="btn-copy" onclick="copyText(\`${line}\n\n${cmd}\`, this)">复制永久配置与命令</button>
+          </div>
+        `;
+      }
+
+      else if (kind === 'yum') {
+        const fastest = okResults[0];
+        const base = fastest.mirror.replace(/\/+$/, '');
+        const repoCfg = `[baseos]\nname=BaseOS\nbaseurl=${base}/centos-stream/$releasever-stream/BaseOS/$basearch/os/\nenabled=1\ngpgcheck=0`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 YUM / DNF 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '/etc/yum.repos.d/*.repo',
+              note: 'YUM/DNF 仅适用于 RHEL/CentOS/Fedora 系 Linux；该方式为永久配置'
+            })}
+            <div class="act-code">${esc(repoCfg)}</div>
+            <button class="btn-copy" onclick="copyText(\`${repoCfg}\`, this)">复制永久 .repo 片段</button>
+          </div>
+        `;
+      }
+
+      else if (kind === 'apk') {
+        const fastest = okResults[0];
+        const base = fastest.mirror.replace(/\/+$/, '');
+        const repos = `${base}/alpine/latest-stable/main\n${base}/alpine/latest-stable/community`;
+        const cmd = `printf '%s\\n' '${base}/alpine/latest-stable/main' '${base}/alpine/latest-stable/community' | sudo tee /etc/apk/repositories >/dev/null && sudo apk update`;
+        el.innerHTML = `
+          <div class="action-panel">
+            <div class="act-title">配置 Alpine APK 使用最快镜像</div>
+            ${renderPathHint({
+              linux: '/etc/apk/repositories',
+              note: 'APK 仅适用于 Alpine Linux；该方式为永久配置'
+            })}
+            <div class="act-code">${esc(repos)}\n\n${esc(cmd)}</div>
+            <button class="btn-copy" onclick="copyText(\`${repos}\n\n${cmd}\`, this)">复制永久配置与命令</button>
+          </div>
+        `;
+      }
+
+      else {
+        el.innerHTML = '';
+      }
+
+      initSystemCommandTabs(el);
+      attachCopyButtons(el);
+    }
+
+    /* ── render results ── */
+    function renderResults(kind, data, meta = {}) {
+      const el = document.getElementById('res-' + kind);
+      const results = data.results || [];
+      lastResults[kind] = results;
+      if (!results.length) { el.innerHTML = '<div class="muted" style="padding:8px 0">无结果</div>'; return; }
+
+      const okResults = results.filter(r => r.ok);
+      const failResults = results.filter(r => !r.ok);
+      const maxSpeed = Math.max(...okResults.map(r => r.download?.speed_mbps || 0), 0.01);
+
+      const summaryEl = document.getElementById('summary-' + kind);
+      const elapsedMs = Number.isFinite(Number(meta.elapsedMs))
+        ? Number(meta.elapsedMs)
+        : (Number.isFinite(Number(data.elapsed_s)) ? Number(data.elapsed_s) * 1000 : NaN);
+      const elapsedText = formatElapsedMs(elapsedMs);
+      if (okResults.length) {
+        let summary = `最快 ${okResults[0].download?.speed_mbps || '?'} MB/s · ${okResults.length}/${results.length} 成功`;
+        if (elapsedText) summary += ` · 总耗时 ${elapsedText}`;
+        if (meta.fromCache) {
+          const ageText = formatCacheAge(Date.now() - Number(meta.savedAt || 0));
+          summary += `（缓存：${ageText}）`;
+        }
+        summaryEl.textContent = summary;
+      } else {
+        summaryEl.textContent = elapsedText ? `0/${results.length} 成功 · 总耗时 ${elapsedText}` : `0/${results.length} 成功`;
+      }
+
+      let html = '';
+      if (okResults.length) {
+        const topOkLimit = kind === 'github' ? 3 : 5;
+        const topOkResults = okResults.slice(0, topOkLimit);
+        const restOkResults = okResults.slice(topOkLimit);
+
+        const renderOkTable = (rows, offset = 0) => {
+          let tableHtml = '<table><thead><tr><th>镜像地址</th><th>速度</th><th>延迟</th><th>TTFB</th><th>状态</th></tr></thead><tbody>';
+          rows.forEach((r, i) => {
+            const rank = offset + i;
+            const speed = r.download ? r.download.speed_mbps : 0;
+            const pct = Math.round((speed / maxSpeed) * 100);
+            const ping = r.ping ? r.ping.latency_ms + ' ms' : '-';
+            const ttfb = r.download ? r.download.time_to_first_byte_s + 's' : '-';
+            const trophy = rank === 0 ? '<span class="trophy">&#127942;</span>' : '';
+            tableHtml += `<tr>
+              <td class="mono">${esc(r.mirror)}</td>
+              <td>${trophy}${speed} MB/s<div class="speed-bar"><div class="speed-fill" style="width:${pct}%"></div></div></td>
+              <td>${esc(ping)}</td>
+              <td>${esc(ttfb)}</td>
+              <td class="ok">成功</td>
+            </tr>`;
+          });
+          tableHtml += '</tbody></table>';
+          return tableHtml;
+        };
+
+        html += renderOkTable(topOkResults, 0);
+
+        if (restOkResults.length) {
+          html += `<details class="fail-fold"><summary class="muted">其余 ${restOkResults.length} 个成功结果（点击展开）</summary>`;
+          html += renderOkTable(restOkResults, topOkLimit);
+          html += '</details>';
+        }
+      }
+
+      if (failResults.length) {
+        const disabledSet = new Set(
+          (((defaults[kind] && defaults[kind].disabled_mirrors) || []).map(normalizeMirrorValue))
+        );
+        html += `<details class="fail-fold"><summary class="muted">${failResults.length} 个失败（点击展开）</summary>`;
+        html += '<table><thead><tr><th>镜像地址</th><th colspan="3">错误</th><th>状态</th></tr></thead><tbody>';
+        failResults.forEach(r => {
+          const isDisabled = disabledSet.has(normalizeMirrorValue(r.mirror));
+          const disableAction = isDisabled
+            ? ''
+            : `<button class="btn-copy btn-disable-mirror" style="margin-right:6px;padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">禁用</button>`;
+          html += `<tr>
+            <td class="mono">${esc(r.mirror)}</td>
+            <td colspan="3" class="muted" style="font-size:12px">${esc(r.error || '未知错误')}</td>
+            <td class="${isDisabled ? 'muted' : 'fail'}" style="white-space:nowrap">${disableAction}${isDisabled ? '禁用' : '失败'}</td>
+          </tr>`;
+        });
+        html += '</tbody></table></details>';
+      }
+
+      el.innerHTML = html;
+      el.querySelectorAll('.btn-disable-mirror').forEach((btn) => {
+        btn.addEventListener('click', () => disableMirror(btn.dataset.kind, btn.dataset.mirror, btn));
+      });
+      renderActions(kind, results);
+    }
+
+    /* ── test ── */
+    async function testOne(kind) {
+      const card = document.getElementById('card-' + kind);
+      const spin = document.getElementById('spin-' + kind);
+      const res = document.getElementById('res-' + kind);
+      const actEl = document.getElementById('actions-' + kind);
+      const btn = document.getElementById('retest-' + kind);
+      const currentRun = activeRuns[kind];
+      if (currentRun && currentRun.running) {
+        currentRun.aborted = true;
+        currentRun.controllers.forEach(controller => controller.abort());
+        appendProgressLog(kind, '收到中断请求，正在停止当前测速...', 'info');
+        btn.textContent = '中断中...';
+        return;
+      }
+      const cfg = readConfig(kind);
+      const disabledSet = new Set((cfg.disabled_mirrors || []).map(normalizeMirrorValue));
+      const activeMirrors = cfg.mirrors.filter(m => !disabledSet.has(normalizeMirrorValue(m)));
+      if (!cfg.mirrors.length) { alert('请填写至少一个镜像地址'); return; }
+      if (!activeMirrors.length) { alert('当前镜像都被禁用，请先清空禁用或补充镜像'); return; }
+
+      card.className = 'card testing';
+      spin.className = 'spinner show';
+      res.innerHTML = '';
+      actEl.innerHTML = '';
+      btn.disabled = false;
+      btn.textContent = '中断';
+      const summaryEl = document.getElementById('summary-' + kind);
+      const total = activeMirrors.length;
+      let done = 0;
+      summaryEl.textContent = `测速中... ${done}/${total}`;
+      const startedAt = performance.now();
+      const runState = { running: true, aborted: false, controllers: new Set() };
+      activeRuns[kind] = runState;
+      const logWrapEl = document.getElementById('logwrap-' + kind);
+      if (logWrapEl) logWrapEl.open = true;
+      clearProgressLog(kind);
+
+      try {
+        const queue = activeMirrors.slice();
+        const results = [];
+        const concurrency = Math.min(4, total);
+        appendProgressLog(kind, `开始测速：${total} 个镜像，并发 ${concurrency}`, 'info');
+        const runSingle = async (mirror) => {
+          const controller = new AbortController();
+          runState.controllers.add(controller);
+          try {
+            const resp = await fetch('/api/test', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
+              body: JSON.stringify({
+                kind,
+                mirrors: [mirror],
+                target: cfg.target,
+                sample_mb: cfg.sample_mb,
+              })
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || '请求失败');
+            const one = (data.results && data.results[0]) || null;
+            return one || { kind, mirror, ok: false, error: '无结果' };
+          } catch (e) {
+            if (runState.aborted) {
+              return { kind, mirror, ok: false, error: '已中断' };
+            }
+            if (e && e.name === 'AbortError') {
+              return { kind, mirror, ok: false, error: '已中断' };
+            }
+            return { kind, mirror, ok: false, error: e.message || String(e) };
+          } finally {
+            runState.controllers.delete(controller);
+            done += 1;
+            summaryEl.textContent = runState.aborted ? `已中断 ${done}/${total}` : `测速中... ${done}/${total}`;
+          }
+        };
+
+        const workers = Array.from({ length: concurrency }, async () => {
+          while (queue.length && !runState.aborted) {
+            const mirror = queue.shift();
+            if (!mirror) continue;
+            const one = await runSingle(mirror);
+            results.push(one);
+            if (one.ok) {
+              const speed = one.download?.speed_mbps;
+              appendProgressLog(
+                kind,
+                `${done}/${total} 成功 ${mirror} · ${Number.isFinite(speed) ? speed + ' MB/s' : '-'}`,
+                'ok'
+              );
+            } else {
+              appendProgressLog(kind, `${done}/${total} 失败 ${mirror} · ${one.error || '未知错误'}`, 'fail');
+            }
+          }
+        });
+        await Promise.all(workers);
+        if (runState.aborted && queue.length) {
+          const remaining = queue.splice(0);
+          remaining.forEach((mirror) => {
+            results.push({ kind, mirror, ok: false, error: '已中断' });
+          });
+          done += remaining.length;
+          summaryEl.textContent = `已中断 ${done}/${total}`;
+          appendProgressLog(kind, `已中断，未开始的镜像已跳过：${remaining.length} 个`, 'info');
+        }
+
+        results.sort((a, b) => {
+          const aOk = a.ok ? 0 : 1;
+          const bOk = b.ok ? 0 : 1;
+          if (aOk !== bOk) return aOk - bOk;
+          const aSpeed = (a.download && a.download.speed_bps) || 0;
+          const bSpeed = (b.download && b.download.speed_bps) || 0;
+          if (aSpeed !== bSpeed) return bSpeed - aSpeed;
+          return String(a.mirror || '').localeCompare(String(b.mirror || ''));
+        });
+
+        const totalElapsedMs = performance.now() - startedAt;
+        const data = {
+          kind,
+          target: cfg.target,
+          sample_mb: cfg.sample_mb,
+          elapsed_s: Number((totalElapsedMs / 1000).toFixed(3)),
+          results,
+        };
+        renderResults(kind, data, { elapsedMs: totalElapsedMs });
+        if (!runState.aborted) {
+          saveResultCache(kind, data);
+        }
+        const okCount = results.filter(item => item.ok).length;
+        if (runState.aborted) {
+          appendProgressLog(kind, `已中断：${okCount}/${results.length} 成功，耗时 ${formatElapsedMs(totalElapsedMs)}`, 'info');
+          card.className = 'card error';
+        } else {
+          appendProgressLog(kind, `完成：${okCount}/${results.length} 成功，总耗时 ${formatElapsedMs(totalElapsedMs)}`, 'info');
+          card.className = 'card done';
+        }
+      } catch (e) {
+        res.innerHTML = `<div class="fail" style="padding:8px 0">${esc(e.message)}</div>`;
+        card.className = 'card error';
+        document.getElementById('summary-' + kind).textContent = '失败';
+        appendProgressLog(kind, `测速中断：${e.message || e}`, 'fail');
+      } finally {
+        spin.className = 'spinner';
+        runState.running = false;
+        if (activeRuns[kind] === runState) {
+          delete activeRuns[kind];
+        }
+        btn.textContent = '重测';
+        btn.disabled = false;
+      }
+    }
+
+    const clearCacheBtn = document.getElementById('clearCacheBtn');
+    if (clearCacheBtn) {
+      clearCacheBtn.addEventListener('click', () => {
+        clearResultCache(true);
+        const original = '清理缓存';
+        clearCacheBtn.textContent = '已清理';
+        setTimeout(() => {
+          clearCacheBtn.textContent = original;
+        }, 1200);
+      });
+    }
+
+    const updateBtn = document.getElementById('updateBtn');
+    if (updateBtn) {
+      updateBtn.addEventListener('click', applyUpdate);
+    }
+
+    const themeToggle = document.getElementById('themeToggle');
+    let currentTheme = getInitialTheme();
+    applyTheme(currentTheme);
+    themeToggle.addEventListener('click', () => {
+      currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+      localStorage.setItem(THEME_KEY, currentTheme);
+      applyTheme(currentTheme);
+    });
+
+    window.addEventListener('hashchange', () => {
+      if (!applyTabFromHash()) return;
+      initTabs();
+      applyTabFilter();
+    });
+
+    fetch('/api/defaults')
+      .then(r => r.json())
+      .then((data) => {
+        initCards(data);
+        checkForUpdate(true);
+        setInterval(() => { checkForUpdate(true); }, UPDATE_CHECK_INTERVAL_MS);
+      })
+      .catch(e => {
+        document.getElementById('cards').innerHTML = '<div class="fail">加载默认配置失败: ' + esc(e.message) + '</div>';
+      });
+  </script>
+</body>
+</html>

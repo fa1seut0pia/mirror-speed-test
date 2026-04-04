@@ -1,0 +1,19 @@
+.idea
+__pycache__
+*.py[cod]
+*.pyo
+*.pyd
+
+# virtual env
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# packaging outputs
+dist/
+build/
+*.spec
