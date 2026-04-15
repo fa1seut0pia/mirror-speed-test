@@ -15,11 +15,11 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-DEFAULT_TIMEOUT = 20
-DEFAULT_START_TIMEOUT = 5
-DEFAULT_MIRROR_MAX_TIME = 20
+DEFAULT_TIMEOUT = 10
+DEFAULT_START_TIMEOUT = 3
+DEFAULT_MIRROR_MAX_TIME = 10
 DEFAULT_SAMPLE_MB = 10
-DEFAULT_WORKERS = 4
+DEFAULT_WORKERS = 0
 DEFAULT_KIND = "docker"
 DEFAULT_DOCKER_TARGET = "homebrew/brew:latest"
 DEFAULT_GITHUB_TARGET = "https://github.com/cli/cli/releases/download/v2.74.2/gh_2.74.2_linux_amd64.tar.gz"
@@ -184,6 +184,13 @@ def fetch_text(url, timeout=DEFAULT_START_TIMEOUT):
         raise MirrorTestError(f"HTTP {error.code} from {url}") from error
     except urllib.error.URLError as error:
         raise MirrorTestError(f"request failed: {error}") from error
+
+
+def fetch_text_with_latency(url, timeout=DEFAULT_START_TIMEOUT):
+    started = time.perf_counter()
+    content = fetch_text(url, timeout=timeout)
+    latency_ms = round((time.perf_counter() - started) * 1000, 1)
+    return content, latency_ms
 
 
 def fetch_json(url, timeout=DEFAULT_START_TIMEOUT):
@@ -467,7 +474,7 @@ def download_sample_url(
             while total_bytes < sample_bytes:
                 remaining = deadline - time.perf_counter()
                 if remaining <= 0:
-                    raise MirrorTestError(f"download max duration exceeded (>{max_duration}s)")
+                    break
                 if first_byte_at is not None:
                     _set_response_socket_timeout(response, min(timeout, max(0.5, remaining)))
                 chunk_size = min(64 * 1024, sample_bytes - total_bytes)
@@ -491,6 +498,8 @@ def download_sample_url(
         raise MirrorTestError(f"download interrupted: {error}") from error
 
     finished_at = time.perf_counter()
+    if first_byte_at is None and total_bytes <= 0:
+        raise MirrorTestError(f"download start timeout (>{start_timeout}s): no data received")
     total_time = finished_at - start
     first_byte_time = (first_byte_at - start) if first_byte_at is not None else total_time
     speed_bps = total_bytes / total_time if total_time > 0 else 0.0
@@ -505,6 +514,7 @@ def download_sample_url(
         "content_length": response_headers.get("Content-Length"),
         "content_range": response_headers.get("Content-Range"),
         "accept_ranges": response_headers.get("Accept-Ranges"),
+        "time_capped": total_bytes < sample_bytes,
     }
 
 
@@ -768,7 +778,7 @@ class RegistryClient:
                 while total_bytes < sample_bytes:
                     remaining = deadline - time.perf_counter()
                     if remaining <= 0:
-                        raise MirrorTestError(f"download max duration exceeded (>{self.max_duration}s)")
+                        break
                     if first_byte_at is not None:
                         _set_response_socket_timeout(response, min(self.timeout, max(0.5, remaining)))
                     chunk_size = min(64 * 1024, sample_bytes - total_bytes)
@@ -789,6 +799,8 @@ class RegistryClient:
                 raise MirrorTestError(f"download start timeout (>{self.start_timeout}s): {error}") from error
             raise MirrorTestError(f"download interrupted: {error}") from error
         finished_at = time.perf_counter()
+        if first_byte_at is None and total_bytes <= 0:
+            raise MirrorTestError(f"download start timeout (>{self.start_timeout}s): no data received")
         total_time = finished_at - start
         first_byte_time = (first_byte_at - start) if first_byte_at is not None else total_time
         speed_bps = total_bytes / total_time if total_time > 0 else 0.0
@@ -803,6 +815,7 @@ class RegistryClient:
             "content_length": response_headers.get("Content-Length"),
             "content_range": response_headers.get("Content-Range"),
             "accept_ranges": response_headers.get("Accept-Ranges"),
+            "time_capped": total_bytes < sample_bytes,
             "location": response_headers.get("Location"),
         }
 
@@ -1190,7 +1203,7 @@ def ping_stream_url(url, timeout=DEFAULT_START_TIMEOUT):
         raise MirrorTestError(f"ping failed: {error}") from error
 
 
-def test_path_mirror(kind, mirror, target, sample_bytes, allow_full_url_prefix=False):
+def test_path_mirror(kind, mirror, target, sample_bytes, allow_full_url_prefix=False, probe_only=False):
     result = make_base_result(kind, mirror, target, sample_bytes)
     try:
         target_url = render_mirror_target(
@@ -1203,6 +1216,10 @@ def test_path_mirror(kind, mirror, target, sample_bytes, allow_full_url_prefix=F
             "label": filename_from_url(target_url),
             "detail": target_url,
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(target_url, sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1211,7 +1228,7 @@ def test_path_mirror(kind, mirror, target, sample_bytes, allow_full_url_prefix=F
     return result
 
 
-def test_docker_mirror(mirror, target, sample_bytes):
+def test_docker_mirror(mirror, target, sample_bytes, probe_only=False):
     client = RegistryClient(mirror)
     result = make_base_result("docker", mirror, target, sample_bytes)
     try:
@@ -1229,6 +1246,10 @@ def test_docker_mirror(mirror, target, sample_bytes):
             "detail": layer.get("mediaType") or "layer",
             "size": layer["size"],
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = client.download_sample(
             manifest["repository"],
             layer["digest"],
@@ -1241,21 +1262,22 @@ def test_docker_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_github_mirror(mirror, target, sample_bytes):
+def test_github_mirror(mirror, target, sample_bytes, probe_only=False):
     return test_path_mirror(
         "github",
         mirror,
         target,
         sample_bytes,
         allow_full_url_prefix=True,
+        probe_only=probe_only,
     )
 
 
-def test_generic_mirror(mirror, target, sample_bytes):
-    return test_path_mirror("generic", mirror, target, sample_bytes)
+def test_generic_mirror(mirror, target, sample_bytes, probe_only=False):
+    return test_path_mirror("generic", mirror, target, sample_bytes, probe_only=probe_only)
 
 
-def test_pip_mirror(mirror, target, sample_bytes):
+def test_pip_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("pip", mirror, target, sample_bytes)
     try:
         package, version = parse_pip_target(target)
@@ -1268,6 +1290,10 @@ def test_pip_mirror(mirror, target, sample_bytes):
             "label": artifact["filename"],
             "detail": artifact["url"],
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(artifact["url"], sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1276,13 +1302,13 @@ def test_pip_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_npm_mirror(mirror, target, sample_bytes):
+def test_npm_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("npm", mirror, target, sample_bytes)
     try:
         package = str(target).strip().lstrip("/")
         pkg_url = f"{mirror.rstrip('/')}/{urllib.parse.quote(package, safe='@/')}"
-        result["ping"] = ping_url(pkg_url)
-        pkg_text = fetch_text(pkg_url)
+        pkg_text, latency_ms = fetch_text_with_latency(pkg_url)
+        result["ping"] = {"ok": True, "status": 200, "latency_ms": latency_ms}
         pkg_meta = json.loads(pkg_text)
         dist_tags = pkg_meta.get("dist-tags") or {}
         latest_version = dist_tags.get("latest")
@@ -1310,6 +1336,10 @@ def test_npm_mirror(mirror, target, sample_bytes):
             "label": f"{package}@{latest_version}",
             "detail": tarball_url,
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(tarball_url, sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1318,7 +1348,7 @@ def test_npm_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_maven_mirror(mirror, target, sample_bytes):
+def test_maven_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("maven", mirror, target, sample_bytes)
     try:
         coord, artifact_url = build_maven_artifact_url(mirror, target)
@@ -1328,6 +1358,10 @@ def test_maven_mirror(mirror, target, sample_bytes):
             "label": label,
             "detail": artifact_url,
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(artifact_url, sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1336,7 +1370,7 @@ def test_maven_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_go_mirror(mirror, target, sample_bytes):
+def test_go_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("go", mirror, target, sample_bytes)
     try:
         module, version = parse_go_target(target)
@@ -1349,6 +1383,10 @@ def test_go_mirror(mirror, target, sample_bytes):
             "label": f"{module}@{resolved_version}",
             "detail": zip_url,
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(zip_url, sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1357,7 +1395,7 @@ def test_go_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_cargo_mirror(mirror, target, sample_bytes):
+def test_cargo_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("cargo", mirror, target, sample_bytes)
     try:
         crate, version = parse_cargo_target(target)
@@ -1368,6 +1406,10 @@ def test_cargo_mirror(mirror, target, sample_bytes):
             "label": f"{crate}@{resolved_version}",
             "detail": download_url,
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(download_url, sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1376,7 +1418,7 @@ def test_cargo_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_nuget_mirror(mirror, target, sample_bytes):
+def test_nuget_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("nuget", mirror, target, sample_bytes)
     try:
         package, version = parse_nuget_target(target)
@@ -1386,6 +1428,10 @@ def test_nuget_mirror(mirror, target, sample_bytes):
             "label": f"{package}@{resolved['version']}",
             "detail": resolved["url"],
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(resolved["url"], sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1394,7 +1440,7 @@ def test_nuget_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_conda_mirror(mirror, target, sample_bytes):
+def test_conda_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("conda", mirror, target, sample_bytes)
     try:
         package, version = parse_conda_target(target)
@@ -1404,6 +1450,10 @@ def test_conda_mirror(mirror, target, sample_bytes):
             "label": f"{package}=={artifact['version']}",
             "detail": artifact["url"],
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(artifact["url"], sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1412,11 +1462,11 @@ def test_conda_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_homebrew_mirror(mirror, target, sample_bytes):
-    return test_path_mirror("homebrew", mirror, target, sample_bytes)
+def test_homebrew_mirror(mirror, target, sample_bytes, probe_only=False):
+    return test_path_mirror("homebrew", mirror, target, sample_bytes, probe_only=probe_only)
 
 
-def test_git_mirror(mirror, target, sample_bytes):
+def test_git_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("git", mirror, target, sample_bytes)
     try:
         repo = parse_git_target(target)
@@ -1427,6 +1477,10 @@ def test_git_mirror(mirror, target, sample_bytes):
             "label": repo,
             "detail": clone_url,
         }
+        if probe_only:
+            result["ok"] = True
+            result["probe_only"] = True
+            return result
         result["download"] = download_sample_url(info_refs_url, sample_bytes)
         result["ok"] = True
     except Exception as error:
@@ -1435,20 +1489,20 @@ def test_git_mirror(mirror, target, sample_bytes):
     return result
 
 
-def test_apt_mirror(mirror, target, sample_bytes):
-    return test_path_mirror("apt", mirror, target, sample_bytes)
+def test_apt_mirror(mirror, target, sample_bytes, probe_only=False):
+    return test_path_mirror("apt", mirror, target, sample_bytes, probe_only=probe_only)
 
 
-def test_yum_mirror(mirror, target, sample_bytes):
-    return test_path_mirror("yum", mirror, target, sample_bytes)
+def test_yum_mirror(mirror, target, sample_bytes, probe_only=False):
+    return test_path_mirror("yum", mirror, target, sample_bytes, probe_only=probe_only)
 
 
-def test_apk_mirror(mirror, target, sample_bytes):
-    return test_path_mirror("apk", mirror, target, sample_bytes)
+def test_apk_mirror(mirror, target, sample_bytes, probe_only=False):
+    return test_path_mirror("apk", mirror, target, sample_bytes, probe_only=probe_only)
 
 
-def test_flatpak_mirror(mirror, target, sample_bytes):
-    return test_path_mirror("flatpak", mirror, target, sample_bytes)
+def test_flatpak_mirror(mirror, target, sample_bytes, probe_only=False):
+    return test_path_mirror("flatpak", mirror, target, sample_bytes, probe_only=probe_only)
 
 
 def default_target_for_kind(kind):
@@ -1532,7 +1586,6 @@ DEFAULT_MIRROR_CONFIG = {
         "icon_url": "https://cdn.simpleicons.org/github/181717",
         "mirrors": [
             "https://github.com",
-            "https://ghproxy.com/{url}",
             "https://cors.isteed.cc/{url}",
             "https://gh-proxy.com/{url}",
             "https://gh.xxooo.cf/{url}",
@@ -1598,6 +1651,7 @@ DEFAULT_MIRROR_CONFIG = {
         "mirrors": [
             "https://goproxy.cn",
             "https://goproxy.io",
+            "https://mirrors.aliyun.com/goproxy/",
             "https://proxy.golang.com.cn",
         ],
         "target": DEFAULT_GO_TARGET,
@@ -1739,7 +1793,7 @@ def get_runtime_config_snapshot():
 RUNTIME_MIRROR_CONFIG = deep_copy_json(DEFAULT_MIRROR_CONFIG)
 
 
-def normalize_test_request(kind=None, mirrors=None, target=None, sample_mb=None):
+def normalize_test_request(kind=None, mirrors=None, target=None, sample_mb=None, probe_only=None):
     normalized_kind = str(kind or DEFAULT_KIND).strip().lower()
     if normalized_kind not in TESTERS:
         raise ValueError(f"unsupported kind: {normalized_kind}")
@@ -1773,19 +1827,20 @@ def normalize_test_request(kind=None, mirrors=None, target=None, sample_mb=None)
         "mirrors": normalized_mirrors,
         "target": normalized_target,
         "sample_mb": normalized_sample_mb,
+        "probe_only": bool(probe_only),
     }
 
 
-def run_test_batch(kind, mirrors, target, sample_mb, progress_callback=None):
+def run_test_batch(kind, mirrors, target, sample_mb, progress_callback=None, probe_only=False):
     started = time.perf_counter()
     sample_bytes = sample_mb * 1024 * 1024
-    workers = min(DEFAULT_WORKERS, max(1, len(mirrors)))
+    workers = max(1, len(mirrors)) if DEFAULT_WORKERS <= 0 else min(DEFAULT_WORKERS, max(1, len(mirrors)))
     tester = TESTERS[kind]
     results = []
     total = len(mirrors)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_map = {
-            executor.submit(tester, mirror, target, sample_bytes): mirror
+            executor.submit(tester, mirror, target, sample_bytes, probe_only=probe_only): mirror
             for mirror in mirrors
         }
         try:
@@ -1884,16 +1939,18 @@ class AppHandler(BaseHTTPRequestHandler):
                     mirrors=payload.get("mirrors"),
                     target=payload.get("target"),
                     sample_mb=payload.get("sample_mb"),
+                    probe_only=payload.get("probe_only"),
                 )
                 log_info(
                     f"{client} POST /api/test start kind={request['kind']} mirrors={len(request['mirrors'])} "
-                    f"sample_mb={request['sample_mb']} target={request['target']}"
+                    f"sample_mb={request['sample_mb']} target={request['target']} probe_only={request['probe_only']}"
                 )
                 response_payload = run_test_batch(
                     kind=request["kind"],
                     mirrors=request["mirrors"],
                     target=request["target"],
                     sample_mb=request["sample_mb"],
+                    probe_only=request["probe_only"],
                 )
             except Exception as error:
                 log_error(f"{client} POST /api/test failed: {error}")

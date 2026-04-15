@@ -6,59 +6,605 @@
   <title>镜像测速</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2322d3ee'/%3E%3Cstop offset='1' stop-color='%232563eb'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='4' width='56' height='56' rx='14' fill='url(%23g)'/%3E%3Cpath d='M18 38a14 14 0 0 1 28 0' fill='none' stroke='white' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='38' r='3.8' fill='white'/%3E%3Cpath d='M32 38l11-10' stroke='white' stroke-width='4.5' stroke-linecap='round'/%3E%3C/svg%3E" />
   <style>
-    :root { color-scheme: light dark; }
+    /* Use OSYB mirror instead of Google Fonts for better accessibility in mainland networks. */
+    @import url('https://fonts.osyb.cn/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+    :root {
+      color-scheme: dark light;
+      --font-display: "Space Grotesk", "Segoe UI", sans-serif;
+      --font-body: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", sans-serif;
+      --font-mono: "JetBrains Mono", "SFMono-Regular", "Cascadia Mono", monospace;
+      --bg-base: #0c1017;
+      --bg-gradient-a: rgba(31, 111, 189, 0.16);
+      --bg-gradient-b: rgba(26, 138, 117, 0.12);
+      --panel-bg: #121821;
+      --panel-bg-strong: #161d28;
+      --panel-bg-muted: #0f151d;
+      --panel-border: rgba(145, 161, 185, 0.18);
+      --panel-border-strong: rgba(145, 161, 185, 0.28);
+      --text-main: #eff4fb;
+      --text-sub: #9ca9bc;
+      --text-faint: #717d90;
+      --accent: #4b8dff;
+      --accent-2: #27b29c;
+      --ok: #4ade80;
+      --warn: #f59e0b;
+      --danger: #f87171;
+      --code-bg: #0d141d;
+      --shadow-main: 0 18px 36px rgba(2, 7, 15, 0.28);
+      --shadow-soft: 0 10px 22px rgba(2, 7, 15, 0.18);
+      --focus-ring: 0 0 0 2px rgba(75, 141, 255, 0.34);
+    }
+
     * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; transition: background 0.2s, color 0.2s; }
-    .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
 
-    .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
-    .header h1 { margin: 0; font-size: 24px; }
-    .header p { margin: 0; color: #94a3b8; font-size: 14px; width: 100%; }
-    .update-status { width: 100%; font-size: 12px; color: #64748b; }
-    .update-status.ok { color: #4ade80; }
-    .update-status.warn { color: #f59e0b; }
-    .update-status.fail { color: #f87171; }
-    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
-    .tab-cats { margin-bottom: 8px; }
-    .tab-btn { border: 1px solid #334155; border-radius: 999px; padding: 7px 12px; background: #0f172a; color: #cbd5e1; font: 13px system-ui, sans-serif; cursor: pointer; transition: all 0.15s; }
-    .tab-btn:hover { border-color: #475569; color: #e2e8f0; }
-    .tab-btn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
-    .tab-cat-btn { border: 1px solid #334155; border-radius: 999px; padding: 6px 10px; background: #0f172a; color: #94a3b8; font: 12px system-ui, sans-serif; cursor: pointer; transition: all 0.15s; }
-    .tab-cat-btn:hover { border-color: #475569; color: #e2e8f0; }
-    .tab-cat-btn.active { background: #334155; border-color: #475569; color: #e2e8f0; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(960px 420px at 0% 0%, var(--bg-gradient-a), transparent 70%),
+        radial-gradient(760px 360px at 100% 0%, var(--bg-gradient-b), transparent 68%),
+        linear-gradient(180deg, #0b1016 0%, var(--bg-base) 100%);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      transition: background 220ms ease, color 220ms ease;
+      position: relative;
+      overflow-x: hidden;
+    }
 
-    .theme-toggle { border: 1px solid #334155; border-radius: 999px; padding: 7px 12px; background: #0f172a; color: #cbd5e1; font: 13px system-ui, sans-serif; cursor: pointer; transition: all 0.15s; }
-    .theme-toggle:hover { border-color: #475569; color: #e2e8f0; }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(255, 255, 255, 0.02), transparent 120px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 20px clamp(16px, 2vw, 32px) 36px;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 20px;
+      top: -48px;
+      z-index: 20;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: #f3f8ff;
+      color: #10243f;
+      font: 600 13px var(--font-body);
+      text-decoration: none;
+      box-shadow: var(--shadow-soft);
+      transition: top 160ms ease;
+    }
+
+    .skip-link:focus {
+      top: 12px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px 18px;
+      align-items: center;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--panel-border);
+      background:
+        linear-gradient(90deg, rgba(75, 141, 255, 0.05), transparent 22%),
+        rgba(15, 21, 29, 0.88);
+      box-shadow: 0 8px 20px rgba(2, 7, 15, 0.14);
+      margin-bottom: 12px;
+      animation: riseIn 240ms ease both;
+    }
+
+    .header-main {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 16px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(96, 162, 255, 0.18);
+      background:
+        linear-gradient(145deg, rgba(75, 141, 255, 0.12), rgba(39, 178, 156, 0.08)),
+        #131a23;
+      box-shadow: none;
+      color: #d8e7ff;
+    }
+
+    .header-copy {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .header-topline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .header-kicker {
+      margin: 0;
+      font: 600 11px var(--font-mono);
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    .header h1 {
+      font-family: var(--font-display);
+      margin: 0;
+      font-size: clamp(22px, 2.2vw, 30px);
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+
+    .header p {
+      margin: 0;
+      color: var(--text-sub);
+      font-size: 12px;
+      line-height: 1.35;
+      max-width: 84ch;
+    }
+
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      max-width: none;
+      align-items: center;
+      padding: 6px;
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      background: rgba(11, 17, 25, 0.44);
+    }
+
+    .theme-toggle {
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 7px 11px;
+      background: rgba(16, 22, 31, 0.72);
+      color: var(--text-main);
+      font: 500 12px var(--font-body);
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--panel-border-strong);
+      background: #182131;
+      color: #f5faff;
+    }
+
+    .theme-toggle:focus-visible,
+    .tab-btn:focus-visible,
+    .tab-cat-btn:focus-visible,
+    .btn-sm:focus-visible,
+    .btn-copy:focus-visible,
+    .btn-dl:focus-visible,
+    .link-btn:focus-visible,
+    .mirror-site-link:focus-visible,
+    .run-log summary:focus-visible,
+    details.fail-fold summary:focus-visible,
+    .act-row input:focus-visible,
+    .edit-panel textarea:focus-visible,
+    .edit-panel input:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+      border-color: rgba(101, 183, 243, 0.74);
+    }
+
     #updateBtn { position: relative; overflow: visible; }
     #updateBtn.has-update::after {
-      content: '';
+      content: "";
       position: absolute;
-      top: 2px;
-      right: 4px;
-      width: 8px;
-      height: 8px;
+      top: 0;
+      right: 0;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
-      background: #fbbf24;
-      box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.75);
-      animation: updatePulse 1.6s infinite;
-    }
-    @keyframes updatePulse {
-      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.75); }
-      70% { transform: scale(1.16); box-shadow: 0 0 0 8px rgba(251, 191, 36, 0); }
-      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+      background: #ffc44d;
+      box-shadow: 0 0 0 0 rgba(255, 196, 77, 0.78);
+      animation: updatePulse 1.55s infinite;
     }
 
-    .card { background: #1e293b; border-radius: 12px; margin-bottom: 16px; overflow: hidden; border: 1px solid #334155; transition: border-color 0.3s; }
-    .card.testing { border-color: #3b82f6; }
-    .card.done { border-color: #22c55e; }
-    .card.error { border-color: #ef4444; }
-    .card-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; cursor: default; }
+    .update-status {
+      grid-column: 2;
+      justify-self: end;
+      font-size: 12px;
+      color: var(--text-faint);
+    }
+    .update-status.ok { color: var(--ok); }
+    .update-status.warn { color: var(--warn); }
+    .update-status.fail { color: var(--danger); }
+
+    .toast-stack {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 40;
+      display: grid;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .toast {
+      min-width: 260px;
+      max-width: min(420px, calc(100vw - 32px));
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--panel-border-strong);
+      background: rgba(18, 24, 33, 0.96);
+      color: var(--text-main);
+      box-shadow: var(--shadow-main);
+      font: 500 13px/1.45 var(--font-body);
+      transform: translateY(-8px);
+      opacity: 0;
+      animation: toastIn 180ms ease forwards;
+    }
+
+    .toast.ok { border-color: rgba(67, 190, 129, 0.38); }
+    .toast.warn { border-color: rgba(245, 158, 11, 0.38); }
+    .toast.fail { border-color: rgba(248, 113, 113, 0.38); }
+
+    .toast.hide {
+      animation: toastOut 180ms ease forwards;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: clamp(280px, 21vw, 360px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 12px;
+      display: grid;
+      gap: 12px;
+      max-height: calc(100vh - 24px);
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .main-panel {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .results-shell {
+      padding: 12px;
+    }
+
+    .results-shell .panel-head {
+      padding-top: 0;
+      padding-left: 0;
+      padding-right: 0;
+      margin-bottom: 10px;
+    }
+
+    .panel {
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: rgba(18, 24, 33, 0.92);
+      box-shadow: 0 8px 20px rgba(2, 7, 15, 0.1);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px 0;
+    }
+
+    .panel-title {
+      margin: 0;
+      font: 600 14px var(--font-display);
+      letter-spacing: 0.01em;
+      color: var(--text-main);
+    }
+
+    .panel-note {
+      font-size: 12px;
+      color: var(--text-faint);
+    }
+
+    .tab-shell {
+      padding: 12px;
+      animation: riseIn 300ms ease both;
+    }
+
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+    .tab-level-label {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-faint);
+      letter-spacing: 0.04em;
+    }
+    .tab-cats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 12px;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      gap: 10px;
+    }
+    .tab-kinds {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .tab-kind-box {
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid var(--panel-border);
+      background: var(--panel-bg-muted);
+    }
+    .tab-btn,
+    .tab-cat-btn {
+      border-radius: 16px;
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+      border: 1px solid var(--panel-border);
+      background: var(--panel-bg-muted);
+      color: var(--text-sub);
+      font-family: var(--font-body);
+    }
+
+    .tab-btn {
+      padding: 9px 16px;
+      min-height: 40px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(21, 31, 45, 0.92);
+      border-color: rgba(145, 161, 185, 0.18);
+      min-width: 104px;
+      justify-content: center;
+      white-space: nowrap;
+    }
+    .tab-kinds .tab-btn {
+      min-width: 108px;
+      width: auto;
+      flex: 0 0 auto;
+      border-radius: 12px;
+      background: rgba(21, 31, 45, 0.68);
+      border-color: rgba(145, 161, 185, 0.14);
+      color: #a9bad0;
+      box-shadow: none;
+    }
+
+    .tab-cat-btn {
+      display: flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(21, 31, 45, 0.42);
+      border-color: rgba(145, 161, 185, 0.12);
+      min-width: 0;
+      width: 100%;
+      justify-content: center;
+      border-radius: 16px;
+      color: #9fb5d2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1;
+    }
+
+    .tab-btn:hover {
+      border-color: var(--panel-border-strong);
+      color: #f3f8ff;
+      background: #1b2636;
+    }
+    .tab-cat-btn:hover {
+      color: #f3f8ff;
+      background: rgba(27, 38, 54, 0.9);
+      border-color: rgba(145, 161, 185, 0.2);
+    }
+
+    .tab-btn.active {
+      border-color: rgba(88, 144, 225, 0.68);
+      background: linear-gradient(180deg, rgba(49, 90, 156, 0.98), rgba(31, 62, 112, 0.99));
+      color: #f8fcff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    .tab-kinds .tab-btn.active {
+      background: linear-gradient(180deg, rgba(61, 130, 214, 0.34), rgba(28, 78, 145, 0.48));
+      color: #f4f9ff;
+      border-color: rgba(119, 184, 255, 0.66);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 20px rgba(29, 83, 155, 0.16);
+    }
+
+    .tab-cat-btn.active {
+      background: linear-gradient(180deg, rgba(33, 168, 146, 0.98), rgba(18, 118, 116, 0.99));
+      color: #f3fffc;
+      border-color: rgba(66, 212, 182, 0.68);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 6px 18px rgba(18, 118, 116, 0.18);
+    }
+
+    .resource-panel {
+      padding: 12px;
+      animation: riseIn 340ms ease both;
+    }
+
+    .resource-quick {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      padding-top: 10px;
+    }
+
+    .resource-layout {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .resource-group {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--panel-border);
+      background: var(--panel-bg-muted);
+    }
+
+    .resource-panel .rp-title {
+      margin: 0 0 10px;
+      font: 600 14px var(--font-display);
+      letter-spacing: 0.01em;
+      color: var(--text-main);
+    }
+
+    .resource-disclosure {
+      margin-top: 8px;
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      background: rgba(13, 20, 29, 0.44);
+      overflow: hidden;
+    }
+
+    .resource-disclosure summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      color: var(--text-sub);
+      font-size: 13px;
+      user-select: none;
+    }
+
+    .resource-disclosure summary::-webkit-details-marker { display: none; }
+
+    .resource-disclosure summary::after {
+      content: "展开";
+      color: var(--accent);
+      font: 600 12px var(--font-body);
+    }
+
+    .resource-disclosure[open] summary {
+      border-bottom: 1px solid var(--panel-border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .resource-disclosure[open] summary::after {
+      content: "收起";
+    }
+
+    .mirror-sites-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .mirror-site-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 7px 9px;
+      border-radius: 10px;
+      border: 1px solid rgba(138, 176, 212, 0.26);
+      background: #151d29;
+      color: var(--text-main);
+      text-decoration: none;
+      font-size: 13px;
+      line-height: 1.45;
+      transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+      cursor: pointer;
+    }
+
+    .mirror-site-link:hover {
+      border-color: var(--panel-border-strong);
+      background: #1b2635;
+      color: #f4f9ff;
+    }
+
+    .mirror-site-icon {
+      width: 19px;
+      height: 19px;
+      border-radius: 6px;
+      background: rgba(58, 139, 209, 0.38);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: #d8ecff;
+      flex-shrink: 0;
+    }
+
+    #cards { display: grid; gap: 16px; width: 100%; }
+
+    .card {
+      background: var(--panel-bg-strong);
+      border-radius: 16px;
+      margin: 0;
+      overflow: hidden;
+      border: 1px solid var(--panel-border);
+      box-shadow: var(--shadow-soft);
+      transition: border-color 220ms ease, box-shadow 220ms ease;
+      animation: riseIn 340ms ease both;
+    }
+
+    .card.testing { border-color: rgba(99, 185, 255, 0.88); box-shadow: 0 0 0 1px rgba(59, 168, 255, 0.24), var(--shadow-soft); }
+    .card.done { border-color: rgba(96, 233, 148, 0.74); box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.22), var(--shadow-soft); }
+    .card.error { border-color: rgba(248, 123, 123, 0.7); box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.2), var(--shadow-soft); }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 15px 18px;
+      cursor: default;
+      background: linear-gradient(180deg, rgba(15, 33, 54, 0.62), rgba(15, 33, 54, 0));
+    }
+
     .card-head .icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      background: rgba(148, 163, 184, 0.14);
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      border: 1px solid rgba(141, 179, 214, 0.36);
+      background: rgba(59, 167, 255, 0.16);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -68,205 +614,824 @@
       overflow: hidden;
     }
     .card-head .icon img { width: 16px; height: 16px; display: block; }
-    .card-head .label { font-weight: 600; font-size: 15px; flex: 1; }
-    .card-head .summary { font-size: 13px; color: #94a3b8; }
+    .card-head .label {
+      font: 600 15px var(--font-display);
+      letter-spacing: 0.01em;
+      flex: 1;
+      min-width: 0;
+    }
+    .card-head .summary {
+      font-size: 13px;
+      color: var(--text-sub);
+      text-align: right;
+      flex: 0 1 44ch;
+      min-width: 0;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .card-head .actions { display: flex; gap: 6px; }
     .card-tip {
-      margin: 0 18px 8px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: #94a3b8;
+      margin: 0 18px 10px;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px dashed rgba(138, 176, 212, 0.38);
+      background: rgba(12, 29, 46, 0.62);
+      color: var(--text-sub);
       font-size: 12px;
       line-height: 1.5;
     }
-    .btn-sm { border: 0; border-radius: 6px; padding: 5px 12px; font: 13px system-ui, sans-serif; cursor: pointer; background: #334155; color: #e2e8f0; transition: background 0.15s; }
-    .btn-sm:hover { background: #475569; }
+
+    .btn-sm,
+    .btn-copy,
+    .btn-dl {
+      border-radius: 8px;
+      padding: 6px 12px;
+      font: 500 12px var(--font-body);
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+      border: 1px solid var(--panel-border);
+    }
+
+    .btn-sm,
+    .btn-copy {
+      background: rgba(17, 44, 69, 0.9);
+      color: #e6f1ff;
+    }
+
+    .btn-sm:hover,
+    .btn-copy:hover {
+      border-color: rgba(114, 194, 248, 0.82);
+      background: rgba(26, 62, 96, 0.94);
+      color: #f6fbff;
+    }
+
     .btn-sm:disabled { opacity: 0.4; cursor: wait; }
+    .btn-copy.copied { background: rgba(13, 109, 66, 0.9); color: #b8f1cd; border-color: rgba(67, 190, 129, 0.62); }
+    .btn-dl {
+      background: linear-gradient(135deg, rgba(33, 120, 224, 0.95), rgba(20, 166, 151, 0.9));
+      color: #eff8ff;
+      border-color: rgba(126, 206, 247, 0.62);
+    }
+    .btn-dl:hover {
+      background: linear-gradient(135deg, rgba(46, 138, 245, 0.98), rgba(21, 179, 162, 0.94));
+      border-color: rgba(158, 218, 249, 0.85);
+    }
 
     .edit-panel { display: none; padding: 0 18px 14px; }
     .edit-panel.open { display: block; }
-    .edit-panel label { display: block; font-size: 12px; color: #94a3b8; margin: 8px 0 4px; }
-    .edit-panel textarea, .edit-panel input { width: 100%; background: #0f172a; color: #f1f5f9; border: 1px solid #334155; border-radius: 6px; padding: 8px 10px; font: 13px ui-monospace, SFMono-Regular, monospace; resize: vertical; }
-    .edit-panel textarea { min-height: 80px; }
+    .edit-panel label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-sub);
+      margin: 8px 0 4px;
+    }
+    .edit-panel textarea,
+    .edit-panel input,
+    .act-row input,
+    .act-code,
+    .run-log {
+      border: 1px solid var(--panel-border);
+    }
+
+    .edit-panel textarea,
+    .edit-panel input,
+    .act-row input {
+      width: 100%;
+      background: var(--code-bg);
+      color: var(--text-main);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: 13px var(--font-mono);
+      resize: vertical;
+    }
+
+    .edit-panel textarea { min-height: 84px; }
     .edit-row { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
     .edit-foot { margin-top: 8px; }
-    .link-btn { background: none; border: 0; color: #60a5fa; font: 12px system-ui; cursor: pointer; padding: 0; }
-    .link-btn:hover { text-decoration: underline; }
+    .link-btn {
+      background: none;
+      border: 0;
+      color: #6bc4ff;
+      font: 12px var(--font-body);
+      cursor: pointer;
+      padding: 0;
+    }
+    .link-btn:hover { color: #9bdaff; text-decoration: underline; }
 
-    .results { padding: 0 18px 14px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 13px; vertical-align: top; }
-    th { color: #94a3b8; font-weight: 600; font-size: 12px; border-bottom-color: #334155; }
-    .mono { font-family: ui-monospace, SFMono-Regular, monospace; word-break: break-all; }
-    .ok { color: #4ade80; }
-    .fail { color: #f87171; }
-    .muted { color: #64748b; }
-    .speed-bar { height: 6px; border-radius: 3px; background: #334155; margin-top: 4px; overflow: hidden; }
-    .speed-fill { height: 100%; border-radius: 3px; background: #3b82f6; transition: width 0.3s; }
-    .trophy { margin-right: 4px; }
+    .results {
+      padding: 0 18px 14px;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid rgba(138, 176, 212, 0.2);
+      font-size: 13px;
+      vertical-align: top;
+    }
+    th {
+      color: var(--text-sub);
+      font-weight: 600;
+      font-size: 12px;
+      border-bottom-color: rgba(138, 176, 212, 0.32);
+    }
+    tr:hover td { background: rgba(42, 95, 139, 0.09); }
+    .mono { font-family: var(--font-mono); word-break: break-all; }
+    .ok { color: var(--ok); }
+    .fail { color: var(--danger); }
+    .muted { color: var(--text-faint); }
+    .speed-bar {
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(132, 170, 206, 0.32);
+      margin-top: 5px;
+      overflow: hidden;
+    }
+    .metric-stack {
+      min-height: 34px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .metric-main {
+      line-height: 1.35;
+    }
+    .speed-bar.placeholder {
+      visibility: hidden;
+    }
+    .speed-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2c8cf2, #22c5b5);
+      transition: width 300ms ease;
+    }
+    .col-mirror { width: 40%; }
+    .col-speed { width: 14%; }
+    .col-latency { width: 13%; }
+    .col-ttfb { width: 11%; }
+    .col-status { width: 8%; }
+    .col-actions { width: 14%; }
+    .cell-actions { white-space: nowrap; }
+    .cell-actions .btn-copy + .btn-copy { margin-left: 6px; }
+    .error-brief {
+      display: inline-flex;
+      align-items: center;
+      overflow: hidden;
+      line-height: 1.2;
+      max-height: 1.2em;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      cursor: help;
+    }
+    .status-with-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: help;
+    }
+    .status-hint-icon {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      opacity: 0.88;
+      flex: 0 0 auto;
+    }
+    .result-row-moving {
+      will-change: transform;
+    }
 
-    .spinner { display: none; padding: 20px 18px; text-align: center; color: #94a3b8; font-size: 14px; }
+    .spinner {
+      display: none;
+      padding: 20px 18px;
+      text-align: center;
+      color: var(--text-sub);
+      font-size: 14px;
+    }
     .spinner.show { display: block; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
     .spinner .dots { animation: pulse 1.2s ease-in-out infinite; }
-    .run-log { margin: 0 18px 10px; border: 1px solid #334155; border-radius: 8px; background: #0f172a; }
-    .run-log summary { cursor: pointer; list-style: none; color: #94a3b8; font-size: 12px; padding: 8px 10px; border-bottom: 1px solid #334155; }
-    .run-log summary::-webkit-details-marker { display: none; }
-    .test-log { max-height: 160px; overflow: auto; padding: 8px 10px; font: 12px ui-monospace, SFMono-Regular, monospace; line-height: 1.5; color: #cbd5e1; }
+    .run-log {
+      margin: 6px 18px 14px;
+      border-radius: 9px;
+      background: var(--code-bg);
+    }
+    .run-log-head {
+      color: var(--text-sub);
+      font-size: 12px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--panel-border);
+    }
+    .test-log {
+      max-height: 160px;
+      overflow: auto;
+      padding: 8px 10px;
+      font: 12px var(--font-mono);
+      line-height: 1.5;
+      color: #c5dbf5;
+    }
     .test-log .line + .line { margin-top: 4px; }
-    .test-log .line.ok { color: #4ade80; }
-    .test-log .line.fail { color: #f87171; }
-    .test-log .line.info { color: #94a3b8; }
+    .test-log .line.ok { color: var(--ok); }
+    .test-log .line.fail { color: var(--danger); }
+    .test-log .line.info { color: var(--text-sub); }
 
-    /* action panel */
-    .action-panel { padding: 12px 18px 16px; border-top: 1px solid #334155; }
-    .action-panel .act-title { font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; }
+    .action-panel {
+      padding: 12px 18px 16px;
+      border-top: 1px solid rgba(138, 176, 212, 0.24);
+    }
+    .action-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px dashed rgba(138, 176, 212, 0.24);
+    }
+    .action-panel .act-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-sub);
+      margin-bottom: 8px;
+    }
     .act-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-    .act-row input { flex: 1; min-width: 180px; background: #0f172a; color: #f1f5f9; border: 1px solid #334155; border-radius: 6px; padding: 6px 10px; font: 13px ui-monospace, SFMono-Regular, monospace; }
-    .act-code { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px 12px; font: 12px ui-monospace, SFMono-Regular, monospace; color: #e2e8f0; white-space: pre-wrap; word-break: break-all; overflow-x: auto; max-height: 200px; overflow-y: auto; margin: 6px 0; line-height: 1.6; }
+    .act-row input { flex: 1; min-width: 180px; }
+    .act-code {
+      background: var(--code-bg);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: 12px var(--font-mono);
+      color: #d6e8fc;
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+      margin: 6px 0;
+      line-height: 1.6;
+    }
     .act-code-wrap { position: relative; margin: 6px 0; }
     .act-code-wrap .act-code { margin: 0; padding-right: 180px; }
-    .act-code-tools { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; opacity: 0; transform: translateX(6px); pointer-events: none; transition: opacity 0.15s, transform 0.15s; }
+    .act-code-tools {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      opacity: 0;
+      transform: translateX(6px);
+      pointer-events: none;
+      transition: opacity 150ms ease, transform 150ms ease;
+    }
     .act-code-wrap:hover .act-code-tools,
-    .act-code-wrap:focus-within .act-code-tools { opacity: 1; transform: translateX(0); pointer-events: auto; }
+    .act-code-wrap:focus-within .act-code-tools {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
     .act-code-tools .btn-copy { padding: 5px 10px; font-size: 12px; }
     .os-switch { margin-top: 6px; }
     .os-tabs { display: inline-flex; gap: 6px; margin: 6px 0 8px; }
-    .os-tab { border: 1px solid #334155; border-radius: 999px; padding: 4px 10px; background: #0f172a; color: #94a3b8; font: 12px system-ui, sans-serif; cursor: pointer; }
-    .os-tab.active { background: #334155; color: #e2e8f0; border-color: #475569; }
+    .os-tab {
+      border: 1px solid var(--panel-border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      background: rgba(13, 32, 52, 0.72);
+      color: var(--text-sub);
+      font: 12px var(--font-body);
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+    .os-tab.active {
+      background: linear-gradient(132deg, rgba(34, 110, 204, 0.9), rgba(20, 160, 146, 0.84));
+      color: #f2f8ff;
+      border-color: rgba(112, 192, 248, 0.88);
+    }
     .os-pane { display: none; }
     .os-pane.active { display: block; }
-    .btn-copy { border: 0; border-radius: 6px; padding: 6px 14px; font: 13px system-ui, sans-serif; cursor: pointer; background: #334155; color: #e2e8f0; transition: background 0.15s; white-space: nowrap; }
-    .btn-copy:hover { background: #475569; }
-    .btn-copy.copied { background: #166534; color: #4ade80; }
-    .btn-dl { border: 0; border-radius: 6px; padding: 6px 14px; font: 13px system-ui, sans-serif; cursor: pointer; background: #2563eb; color: white; transition: background 0.15s; white-space: nowrap; }
-    .btn-dl:hover { background: #1d4ed8; }
 
-    /* failed fold */
     details.fail-fold { margin-top: 8px; }
-    details.fail-fold summary { cursor: pointer; color: #94a3b8; font-size: 12px; padding: 4px 0; }
-    details.fail-fold summary:hover { color: #e2e8f0; }
+    details.fail-fold summary {
+      cursor: pointer;
+      color: var(--text-sub);
+      font-size: 12px;
+      padding: 6px 0;
+    }
+    details.fail-fold summary:hover { color: var(--text-main); }
 
-    @media (max-width: 640px) {
-      .edit-row { grid-template-columns: 1fr; }
-      .act-row { flex-direction: column; align-items: stretch; }
-      .act-code-wrap .act-code { padding-right: 12px; padding-bottom: 56px; }
-      .act-code-tools { opacity: 1; transform: none; pointer-events: auto; top: auto; bottom: 8px; right: 8px; left: 8px; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+    body.theme-light {
+      --bg-base: #f7fafc;
+      --bg-gradient-a: rgba(79, 137, 224, 0.08);
+      --bg-gradient-b: rgba(26, 138, 117, 0.05);
+      --panel-bg: #ffffff;
+      --panel-bg-strong: #ffffff;
+      --panel-bg-muted: #f5f7fb;
+      --panel-border: rgba(149, 163, 184, 0.2);
+      --panel-border-strong: rgba(110, 129, 156, 0.28);
+      --text-main: #162233;
+      --text-sub: #617287;
+      --text-faint: #8291a3;
+      --code-bg: #f5f8fc;
+      --shadow-main: 0 16px 28px rgba(46, 64, 90, 0.08);
+      --shadow-soft: 0 6px 14px rgba(46, 64, 90, 0.06);
+      --focus-ring: 0 0 0 2px rgba(75, 141, 255, 0.16);
+      color-scheme: light;
     }
 
     body.theme-light {
-      background: #f8fafc;
-      color: #0f172a;
+      background:
+        radial-gradient(820px 320px at 0% 0%, rgba(79, 137, 224, 0.1), transparent 65%),
+        radial-gradient(720px 280px at 100% 0%, rgba(26, 138, 117, 0.06), transparent 70%),
+        linear-gradient(180deg, #fbfdff 0%, #f6f9fc 100%);
     }
-    body.theme-light .header p,
-    body.theme-light .update-status,
-    body.theme-light .card-head .summary,
-    body.theme-light .edit-panel label,
-    body.theme-light .spinner,
-    body.theme-light .action-panel .act-title,
-    body.theme-light details.fail-fold summary,
-    body.theme-light th { color: #475569; }
-    body.theme-light .tab-btn,
+
+    body.theme-light::before {
+      background: linear-gradient(to bottom, rgba(255, 255, 255, 0.65), transparent 180px);
+    }
+
+    body.theme-light .panel,
+    body.theme-light .header,
+    body.theme-light .card,
+    body.theme-light .resource-panel,
+    body.theme-light .tab-shell {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(6px);
+    }
+    body.theme-light .header {
+      background:
+        linear-gradient(90deg, rgba(79, 137, 224, 0.06), transparent 22%),
+        rgba(255, 255, 255, 0.9);
+    }
+    body.theme-light .header-actions {
+      background: rgba(245, 247, 251, 0.92);
+      border-color: rgba(149, 163, 184, 0.18);
+    }
+    body.theme-light .brand-mark {
+      background:
+        linear-gradient(145deg, rgba(79, 137, 224, 0.12), rgba(26, 138, 117, 0.08)),
+        #f4f7fb;
+      color: #2d4f77;
+      border-color: rgba(110, 129, 156, 0.18);
+    }
+    body.theme-light .card-head {
+      background: linear-gradient(180deg, rgba(230, 238, 248, 0.9), rgba(255, 255, 255, 0));
+    }
+    body.theme-light .resource-group,
+    body.theme-light .resource-disclosure,
     body.theme-light .theme-toggle,
-    body.theme-light .tab-cat-btn {
-      background: #ffffff;
-      color: #334155;
-      border-color: #cbd5e1;
+    body.theme-light .tab-btn,
+    body.theme-light .tab-cat-btn,
+    body.theme-light .mirror-site-link,
+    body.theme-light .card-tip {
+      background: var(--panel-bg-muted);
     }
-    body.theme-light .tab-btn:hover,
+    body.theme-light .theme-toggle {
+      background: rgba(255, 255, 255, 0.72);
+      color: #2d415b;
+    }
     body.theme-light .theme-toggle:hover,
-    body.theme-light .tab-cat-btn:hover,
+    body.theme-light .mirror-site-link:hover,
     body.theme-light .btn-sm:hover,
     body.theme-light .btn-copy:hover {
-      border-color: #94a3b8;
-      background: #f1f5f9;
-      color: #0f172a;
+      background: #eaf0f7;
+      color: var(--text-main);
     }
-    body.theme-light .tab-btn.active {
-      background: #2563eb;
-      border-color: #2563eb;
-      color: #fff;
+    body.theme-light .tab-btn {
+      background: #f5f8fc;
+      color: #5b6e86;
+      border-color: rgba(124, 140, 161, 0.2);
+    }
+    body.theme-light .tab-level-label {
+      color: #7f92aa;
+    }
+    body.theme-light .tab-kind-box {
+      background: #f3f7fb;
+      border-color: rgba(124, 140, 161, 0.2);
+    }
+    body.theme-light .tabs:not(.tab-cats) .tab-btn {
+      background: linear-gradient(180deg, #f8fbfe, #eef4fa);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+    }
+    body.theme-light .tab-kinds .tab-btn {
+      background: #eef4fa;
+      color: #667b95;
+      border-color: rgba(124, 140, 161, 0.2);
+      box-shadow: none;
+    }
+    body.theme-light .tab-cat-btn {
+      color: #5f728b;
+      background: #f1f6fb;
+      border-color: rgba(124, 140, 161, 0.2);
+      box-shadow: none;
     }
     body.theme-light .tab-cat-btn.active {
-      background: #e2e8f0;
-      border-color: #94a3b8;
-      color: #0f172a;
+      background: linear-gradient(180deg, #48c0ad, #239585);
+      color: #f7fffd;
+      border-color: rgba(27, 145, 132, 0.52);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 18px rgba(35, 149, 133, 0.14);
     }
-    body.theme-light .card {
-      background: #ffffff;
-      border-color: #cbd5e1;
+    body.theme-light .tab-btn.active {
+      background: linear-gradient(180deg, #dbeaff, #c7dbfb);
+      color: #163e73;
+      border-color: rgba(77, 131, 214, 0.5);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68), 0 8px 18px rgba(77, 131, 214, 0.14);
     }
-    body.theme-light .card-tip {
-      background: #f8fafc;
-      border-color: #e2e8f0;
-      color: #475569;
+    body.theme-light .tab-btn:hover,
+    body.theme-light .tab-cat-btn:hover {
+      background: #e9f0f8;
+      color: #24415f;
+      border-color: rgba(124, 140, 161, 0.26);
     }
-    body.theme-light .card-head .icon {
-      background: #eef2ff;
-      border-color: #dbe2f0;
+    body.theme-light .tab-btn.active:hover {
+      background: linear-gradient(180deg, #dbeaff, #c7dbfb);
+      color: #163e73;
+      border-color: rgba(77, 131, 214, 0.5);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68), 0 8px 18px rgba(77, 131, 214, 0.14);
+    }
+    body.theme-light .tab-kinds .tab-btn.active,
+    body.theme-light .tab-kinds .tab-btn.active:hover {
+      background: linear-gradient(180deg, #dbeaff, #c7dbfb);
+      color: #163e73;
+      border-color: rgba(77, 131, 214, 0.5);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68), 0 8px 18px rgba(77, 131, 214, 0.14);
+    }
+    body.theme-light .tab-cat-btn.active:hover {
+      background: linear-gradient(180deg, #48c0ad, #239585);
+      color: #f7fffd;
+      border-color: rgba(27, 145, 132, 0.52);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 18px rgba(35, 149, 133, 0.14);
     }
     body.theme-light .btn-sm,
     body.theme-light .btn-copy {
-      background: #e2e8f0;
-      color: #1e293b;
+      background: #edf3fa;
+      color: #16325c;
     }
-    body.theme-light .os-tab {
-      background: #ffffff;
-      color: #475569;
-      border-color: #cbd5e1;
-    }
-    body.theme-light .os-tab.active {
-      background: #e2e8f0;
-      color: #0f172a;
-      border-color: #94a3b8;
-    }
-    body.theme-light .edit-panel textarea,
-    body.theme-light .edit-panel input,
-    body.theme-light .act-row input,
-    body.theme-light .act-code {
-      background: #f8fafc;
-      color: #0f172a;
-      border-color: #cbd5e1;
+    body.theme-light .btn-copy.copied {
+      background: #dcf3e4;
+      color: #17603b;
+      border-color: rgba(67, 190, 129, 0.34);
     }
     body.theme-light .act-code,
-    body.theme-light th,
-    body.theme-light td,
-    body.theme-light .action-panel,
-    body.theme-light .run-log,
-    body.theme-light .run-log summary {
-      border-color: #e2e8f0;
+    body.theme-light .run-log {
+      background: #f5f8fc;
+      color: #132e53;
+      border-color: rgba(124, 140, 161, 0.24);
     }
-    body.theme-light .run-log { background: #f8fafc; }
-    body.theme-light .test-log { color: #334155; }
-    body.theme-light .test-log .line.info { color: #64748b; }
-    body.theme-light .link-btn { color: #2563eb; }
-    body.theme-light details.fail-fold summary:hover { color: #0f172a; }
-    body.theme-light .muted { color: #64748b; }
-    body.theme-light .speed-bar { background: #cbd5e1; }
-    body.theme-light .ok { color: #16a34a; }
-    body.theme-light .fail { color: #dc2626; }
-    body.theme-light .btn-copy.copied { background: #dcfce7; color: #166534; }
+    body.theme-light .run-log-head {
+      color: #5b6b80;
+      border-color: rgba(124, 140, 161, 0.24);
+    }
+    body.theme-light .os-tab {
+      background: #edf3fa;
+      color: #4d617a;
+      border-color: rgba(124, 140, 161, 0.24);
+    }
+    body.theme-light .os-tab.active {
+      background: #dbe7fb;
+      color: #16325c;
+      border-color: rgba(87, 122, 183, 0.45);
+    }
+    body.theme-light .tab-cat-btn:hover {
+      background: transparent;
+      color: #1f3856;
+      border-color: transparent;
+    }
+    body.theme-light .tabs:not(.tab-cats) .tab-btn:hover {
+      background: linear-gradient(180deg, #edf4fb, #e4edf8);
+      color: #1f3856;
+      border-color: rgba(124, 140, 161, 0.26);
+    }
+    body.theme-light .card-head .icon {
+      background: rgba(75, 141, 255, 0.1);
+      border-color: rgba(87, 122, 183, 0.24);
+    }
+    body.theme-light .toast {
+      background: rgba(255, 255, 255, 0.98);
+      color: #182538;
+      border-color: rgba(124, 140, 161, 0.24);
+    }
+    body.theme-light .toast.ok { border-color: rgba(67, 190, 129, 0.34); }
+    body.theme-light .toast.warn { border-color: rgba(245, 158, 11, 0.34); }
+    body.theme-light .toast.fail { border-color: rgba(248, 113, 113, 0.34); }
+    body.theme-light .test-log { color: #214064; }
+    body.theme-light .act-code .mono,
+    body.theme-light .act-code-wrap .act-code,
+    body.theme-light #daemon-json {
+      color: #132e53;
+    }
+    body.theme-light .action-section {
+      border-top-color: rgba(124, 140, 161, 0.2);
+    }
+    body.theme-light .link-btn { color: #1d6ed8; }
+    body.theme-light .link-btn:hover { color: #1559b1; }
+    body.theme-light code.mono[style] { color: #132e53 !important; }
+    body.theme-light .act-row code.mono {
+      color: #132e53 !important;
+    }
 
-    body.theme-light code.mono[style] { color: #0f172a !important; }
+    @media (max-width: 1180px) {
+      .header {
+        grid-template-columns: 1fr;
+      }
+      .update-status {
+        grid-column: 1;
+        justify-self: start;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        position: static;
+        display: contents;
+      }
+      .tab-shell {
+        order: 1;
+      }
+      .main-panel {
+        order: 2;
+      }
+      .resource-panel {
+        order: 3;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 14px 12px 28px; }
+      .header {
+        padding: 14px;
+        border-radius: 12px;
+        gap: 14px;
+      }
+      .header-main {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .brand-mark {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+      }
+      .header-topline {
+        gap: 8px;
+      }
+      .header-actions {
+        justify-content: flex-start;
+        max-width: none;
+      }
+      .tab-shell,
+      .resource-panel {
+        padding: 12px;
+        border-radius: 14px;
+      }
+      .resource-quick {
+        grid-template-columns: 1fr;
+      }
+      .tab-cats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .resource-group { padding: 10px; }
+      .mirror-sites-grid { grid-template-columns: 1fr; }
+      .edit-row { grid-template-columns: 1fr; }
+      .act-row { flex-direction: column; align-items: stretch; }
+      .act-code-wrap .act-code { padding-right: 12px; padding-bottom: 56px; }
+      .act-code-tools {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+        top: auto;
+        bottom: 8px;
+        right: 8px;
+        left: 8px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .card-head {
+        flex-wrap: wrap;
+      }
+      .card-head .actions {
+        width: 100%;
+        justify-content: flex-end;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .spinner .dots { animation: none !important; }
+    }
+
+    @keyframes updatePulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 196, 77, 0.8); }
+      70% { transform: scale(1.16); box-shadow: 0 0 0 8px rgba(255, 196, 77, 0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 196, 77, 0); }
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes toastOut {
+      from {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+    }
+
+    @keyframes riseIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">跳到测速结果</a>
+  <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
   <div class="wrap">
     <div class="header">
-      <h1>镜像测速</h1>
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <div class="header-main">
+        <div class="brand-mark" aria-hidden="true">
+          <svg style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;" viewBox="0 0 24 24">
+            <path d="M4 14a8 8 0 0 1 16 0"></path>
+            <path d="M12 14l5-5"></path>
+            <circle cx="12" cy="14" r="1.6" fill="currentColor" stroke="none"></circle>
+          </svg>
+        </div>
+        <div class="header-copy">
+          <div class="header-topline">
+            <div class="header-kicker">Mirror Speed Test</div>
+            <h1>镜像测速</h1>
+          </div>
+          <p>面向开发环境的镜像源测速与配置工具。</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="https://github.com/fa1seut0pia/mirror-speed-test" target="_blank" rel="noopener" class="theme-toggle" title="在 GitHub 上查看项目">
+          <svg style="width:16px;height:16px;fill:currentColor;" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+          GitHub
+        </a>
         <button class="theme-toggle" id="updateBtn" title="检查更新">检查更新</button>
         <button class="theme-toggle" id="clearCacheBtn">清理缓存</button>
         <button class="theme-toggle" id="themeToggle">切换亮色</button>
       </div>
-      <p>按类别测试 Docker、GitHub、常用开发源与 Linux 软件源镜像的延迟和下载速度</p>
-      <div class="update-status" id="updateStatus"></div>
+      <div class="update-status" id="updateStatus" role="status" aria-live="polite"></div>
     </div>
-    <div id="tabCategories" class="tabs tab-cats"></div>
-    <div id="tabs" class="tabs"></div>
-    <div id="cards"></div>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="tab-shell panel">
+          <div class="panel-head">
+            <h2 class="panel-title">测速分类</h2>
+          </div>
+          <div style="padding:12px 2px 0">
+            <div class="tab-level-label">分类</div>
+            <div id="tabCategories" class="tabs tab-cats"></div>
+            <div class="tab-kind-box">
+              <div class="tab-level-label">源类型</div>
+              <div id="tabs" class="tabs tab-kinds"></div>
+            </div>
+          </div>
+        </div>
+        <div class="resource-panel panel">
+          <div class="panel-head">
+            <h2 class="panel-title">参考站点</h2>
+          </div>
+          <div class="resource-quick" aria-label="高频参考站点">
+            <a class="mirror-site-link" href="https://mirrors.huaweicloud.com/" target="_blank" rel="noopener">
+              <span class="mirror-site-icon">H</span>
+              <span>华为云镜像站</span>
+            </a>
+            <a class="mirror-site-link" href="https://mirrors.aliyun.com/" target="_blank" rel="noopener">
+              <span class="mirror-site-icon">A</span>
+              <span>阿里云开源镜像站</span>
+            </a>
+            <a class="mirror-site-link" href="https://mirrors.tuna.tsinghua.edu.cn/" target="_blank" rel="noopener">
+              <span class="mirror-site-icon">T</span>
+              <span>清华大学镜像站</span>
+            </a>
+            <a class="mirror-site-link" href="https://test.ustc.edu.cn/" target="_blank" rel="noopener">
+              <span class="mirror-site-icon">U</span>
+              <span>中科大网络测速</span>
+            </a>
+          </div>
+          <details class="resource-disclosure">
+            <summary>更多参考站点与测速入口</summary>
+            <div class="resource-layout">
+              <div class="resource-group">
+                <div class="rp-title">常用镜像站</div>
+                <div class="mirror-sites-grid">
+                  <a class="mirror-site-link" href="https://repo.huaweicloud.com/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">HW</span>
+                    <span>华为开源镜像站</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://registry.npmmirror.com/binary.html" target="_blank" rel="noopener" title="提供 Node.js、Python、Bun、Deno、Electron、ffmpeg、ChromeDriver、Minikube、Git for Windows 等开发与构建工具的安装包">
+                    <span class="mirror-site-icon">N</span>
+                    <span>npmmirror 安装包下载 <svg style="width:1em;height:1em;vertical-align:middle;fill:currentColor;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="17" text-anchor="middle" font-size="14" fill="currentColor" font-family="sans-serif">?</text></svg></span>
+                  </a>
+                  <a class="mirror-site-link" href="https://mirrors.tencent.com/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">TX</span>
+                    <span>腾讯云镜像站</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://mirrors.cloud.tencent.com/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">Q</span>
+                    <span>腾讯云内网镜像站</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://mirrors.163.com/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">163</span>
+                    <span>网易开源镜像站</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://mirrors.sjtug.sjtu.edu.cn/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">S</span>
+                    <span>上海交大镜像站</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://mirrors.ustc.edu.cn/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">U</span>
+                    <span>中科大镜像站</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://mirrors.zju.edu.cn/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">Z</span>
+                    <span>浙江大学镜像站</span>
+                  </a>
+                </div>
+              </div>
+              <div class="resource-group">
+                <div class="rp-title">网络测速站</div>
+                <div class="mirror-sites-grid">
+                  <a class="mirror-site-link" href="https://test.nju.edu.cn/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">N</span>
+                    <span>南京大学网络测速</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://speed.neu.edu.cn/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">NEU</span>
+                    <span>东北大学网络测速</span>
+                  </a>
+                  <a class="mirror-site-link" href="http://speed.nuaa.edu.cn/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">NUAA</span>
+                    <span>南京航空航天大学测速</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://www.speedtest.net/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">S</span>
+                    <span>Speedtest.net</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://fast.com/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">F</span>
+                    <span>Fast.com</span>
+                  </a>
+                  <a class="mirror-site-link" href="https://net.wfso.cn/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">W</span>
+                    <span>net.wfso.cn</span>
+                  </a>
+                  <a class="mirror-site-link" href="http://speed.do/" target="_blank" rel="noopener">
+                    <span class="mirror-site-icon">SD</span>
+                    <span>speed.do</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </aside>
+      <main class="main-panel" id="mainContent">
+        <div class="panel results-shell">
+          <div class="panel-head">
+            <h2 class="panel-title">测速结果</h2>
+          </div>
+          <div id="cards"></div>
+        </div>
+      </main>
+    </div>
   </div>
 
   <script>
@@ -282,6 +1447,7 @@
     const RESULT_CACHE_KEY = 'mst-result-cache-v1';
     const RESULT_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
     const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
+    const TWO_PHASE_TEST_KINDS = new Set(['github']);
     const TAB_LABELS = {
       docker: 'Docker',
       github: 'GitHub',
@@ -300,9 +1466,9 @@
       flatpak: 'Flatpak',
     };
     const TAB_CATEGORIES = [
-      { key: 'common', label: '常用', kinds: ['docker', 'github', 'pip', 'npm'] },
-      { key: 'lang', label: '开发语言', kinds: ['maven', 'go', 'cargo', 'nuget', 'conda', 'homebrew'] },
-      { key: 'linux', label: 'Linux 系统', kinds: ['apt', 'yum', 'apk', 'flatpak'] },
+      { key: 'common', label: '常用', kinds: ['docker', 'github'] },
+      { key: 'lang', label: '开发', kinds: ['pip', 'npm', 'maven', 'go', 'cargo', 'nuget', 'conda', 'homebrew'] },
+      { key: 'linux', label: 'Linux', kinds: ['apt', 'yum', 'apk', 'flatpak'] },
       { key: 'advanced', label: '自定义', kinds: ['generic'] },
     ];
     let activeTab = 'docker';
@@ -312,11 +1478,30 @@
     const activeRuns = {};
     let updateState = null;
 
+    function showToast(message, level = '', duration = 3200) {
+      const stack = document.getElementById('toastStack');
+      if (!stack || !message) return;
+      const toast = document.createElement('div');
+      toast.className = `toast${level ? ' ' + level : ''}`;
+      toast.setAttribute('role', 'status');
+      toast.textContent = message;
+      stack.appendChild(toast);
+
+      window.setTimeout(() => {
+        toast.classList.add('hide');
+        window.setTimeout(() => toast.remove(), 220);
+      }, duration);
+    }
+
     function setUpdateStatus(message, level = '') {
       const el = document.getElementById('updateStatus');
       if (!el) return;
       el.textContent = message || '';
       el.className = `update-status${level ? ' ' + level : ''}`;
+    }
+
+    function clearUpdateStatus() {
+      setUpdateStatus('', '');
     }
 
     function syncUpdateBadgeAndTooltip(data) {
@@ -365,13 +1550,17 @@
         } else {
           if (btn) btn.textContent = '检查更新';
           if (!silent) {
-            setUpdateStatus(`当前已是最新版本（${current}）`, 'ok');
+            clearUpdateStatus();
+            showToast(`当前已是最新版本（${current}）`, 'ok');
           } else {
-            setUpdateStatus('', '');
+            clearUpdateStatus();
           }
         }
       } catch (e) {
-        if (!silent) setUpdateStatus(`更新检查失败：${e.message || e}`, 'fail');
+        if (!silent) {
+          clearUpdateStatus();
+          showToast(`更新检查失败：${e.message || e}`, 'fail');
+        }
         if (btn) {
           btn.textContent = original;
           btn.title = `更新检查失败：${e.message || e}`;
@@ -409,7 +1598,8 @@
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || '更新失败');
-        setUpdateStatus(data.message || '更新处理完成', 'ok');
+        clearUpdateStatus();
+        showToast(data.message || '更新处理完成', 'ok');
         if (data.open_in_browser && data.download_url) {
           window.open(data.download_url, '_blank');
           if (btn) btn.textContent = updateState.can_download ? `下载 ${updateState.latest_version}` : '查看更新';
@@ -419,7 +1609,7 @@
           if (btn) btn.textContent = original;
         }
       } catch (e) {
-        setUpdateStatus(`更新失败：${e.message || e}`, 'fail');
+        showToast(`更新失败：${e.message || e}`, 'fail');
         if (btn) btn.textContent = original;
       } finally {
         if (btn) btn.disabled = false;
@@ -545,6 +1735,20 @@
       });
     }
 
+    function getPreferredMirror(kind, results = []) {
+      const okResults = (results || []).filter(r => r && r.ok);
+      if (okResults.length) return { mirror: okResults[0].mirror, fromResults: true };
+
+      const cfg = readConfig(kind);
+      const disabledSet = new Set((cfg.disabled_mirrors || []).map(normalizeMirrorValue));
+      const fallback = (cfg.mirrors || []).find(m => !disabledSet.has(normalizeMirrorValue(m))) || cfg.mirrors[0] || '';
+      return { mirror: fallback, fromResults: false };
+    }
+
+    function renderActionSourceNote(kind, preferred) {
+      return '';
+    }
+
     function attachCopyButtons(root) {
       if (!root) return;
       root.querySelectorAll('.act-code').forEach(codeEl => {
@@ -652,10 +1856,7 @@
         }
         const summary = document.getElementById('summary-' + kind);
         if (summary) summary.textContent = '';
-        const results = document.getElementById('res-' + kind);
-        if (results) results.innerHTML = '';
-        const actions = document.getElementById('actions-' + kind);
-        if (actions) actions.innerHTML = '';
+        renderResults(kind, { results: [] });
       }
     }
 
@@ -682,6 +1883,16 @@
       return `${days} 天前`;
     }
 
+    function getConfiguredMirrorRows(kind) {
+      const cfg = readConfig(kind);
+      const mirrors = Array.isArray(cfg?.mirrors) ? cfg.mirrors : [];
+      return mirrors.map(mirror => ({
+        mirror,
+        ok: false,
+        pending: true,
+      }));
+    }
+
     function formatElapsedMs(ms) {
       if (!Number.isFinite(ms) || ms < 0) return '';
       if (ms < 1000) return `${Math.round(ms)} ms`;
@@ -695,6 +1906,99 @@
       const d = new Date(ts);
       const pad = (n) => String(n).padStart(2, '0');
       return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function rankProbeResults(a, b) {
+      const aOk = a && a.ok ? 0 : 1;
+      const bOk = b && b.ok ? 0 : 1;
+      if (aOk !== bOk) return aOk - bOk;
+      const aPing = Number(a?.ping?.latency_ms);
+      const bPing = Number(b?.ping?.latency_ms);
+      if (Number.isFinite(aPing) && Number.isFinite(bPing) && aPing !== bPing) return aPing - bPing;
+      if (Number.isFinite(aPing) && !Number.isFinite(bPing)) return -1;
+      if (!Number.isFinite(aPing) && Number.isFinite(bPing)) return 1;
+      return String(a?.mirror || '').localeCompare(String(b?.mirror || ''));
+    }
+
+    function sortTestResults(results) {
+      return (results || []).slice().sort((a, b) => {
+        const aProbe = a.probe_only ? 1 : 0;
+        const bProbe = b.probe_only ? 1 : 0;
+        const aOk = a.ok ? 0 : 1;
+        const bOk = b.ok ? 0 : 1;
+        if (aOk !== bOk) return aOk - bOk;
+        if (aProbe !== bProbe) return aProbe - bProbe;
+        const aSpeed = (a.download && a.download.speed_bps) || 0;
+        const bSpeed = (b.download && b.download.speed_bps) || 0;
+        if (aSpeed !== bSpeed) return bSpeed - aSpeed;
+        const aPing = Number(a?.ping?.latency_ms) || Number.POSITIVE_INFINITY;
+        const bPing = Number(b?.ping?.latency_ms) || Number.POSITIVE_INFINITY;
+        if (aPing !== bPing) return aPing - bPing;
+        return String(a.mirror || '').localeCompare(String(b.mirror || ''));
+      });
+    }
+
+    function upsertTestResult(results, next) {
+      const list = Array.isArray(results) ? results.slice() : [];
+      const target = normalizeMirrorValue(next?.mirror);
+      const idx = list.findIndex(item => normalizeMirrorValue(item?.mirror) === target);
+      if (idx >= 0) {
+        list[idx] = next;
+      } else {
+        list.push(next);
+      }
+      return list;
+    }
+
+    function renderSpeedMetric(label, pct = null, extraClass = '') {
+      const safeClass = extraClass ? ` ${extraClass}` : '';
+      const hasBar = Number.isFinite(pct);
+      return `<div class="metric-stack${safeClass}"><div class="metric-main">${esc(label)}</div><div class="speed-bar${hasBar ? '' : ' placeholder'}">${hasBar ? `<div class="speed-fill" style="width:${pct}%"></div>` : ''}</div></div>`;
+    }
+
+    function renderMetricCell(label, extraClass = '') {
+      const safeClass = extraClass ? ` ${extraClass}` : '';
+      return `<div class="metric-stack${safeClass}"><div class="metric-main">${esc(label)}</div><div class="speed-bar placeholder"></div></div>`;
+    }
+
+    function sortRunningRows(rows, resultMap, pendingSet, disabledSet) {
+      return (rows || []).slice().sort((a, b) => {
+        const aKey = normalizeMirrorValue(a?.mirror);
+        const bKey = normalizeMirrorValue(b?.mirror);
+        const aRecord = resultMap.get(aKey);
+        const bRecord = resultMap.get(bKey);
+        const aDisabled = disabledSet.has(aKey);
+        const bDisabled = disabledSet.has(bKey);
+        const aPending = pendingSet.has(aKey);
+        const bPending = pendingSet.has(bKey);
+
+        const rankOf = (record, pending, disabled) => {
+          if (disabled) return 6;
+          if (record?.ok && record.download) return 0;
+          if (record?.probe_only && !pending) return 1;
+          if (pending) return 2;
+          if (record && !record.ok) return 4;
+          return 3;
+        };
+
+        const aRank = rankOf(aRecord, aPending, aDisabled);
+        const bRank = rankOf(bRecord, bPending, bDisabled);
+        if (aRank !== bRank) return aRank - bRank;
+
+        if (aRank === 0) {
+          const aSpeed = Number(aRecord?.download?.speed_bps) || 0;
+          const bSpeed = Number(bRecord?.download?.speed_bps) || 0;
+          if (aSpeed !== bSpeed) return bSpeed - aSpeed;
+        }
+
+        if (aRank === 1 || aRank === 2) {
+          const aPing = Number(aRecord?.ping?.latency_ms) || Number.POSITIVE_INFINITY;
+          const bPing = Number(bRecord?.ping?.latency_ms) || Number.POSITIVE_INFINITY;
+          if (aPing !== bPing) return aPing - bPing;
+        }
+
+        return String(a?.mirror || '').localeCompare(String(b?.mirror || ''));
+      });
     }
 
     function clearProgressLog(kind) {
@@ -722,8 +2026,8 @@
       for (const kind of ALL_KINDS) {
         const c = data[kind];
         if (!c) continue;
-        container.innerHTML += `
-          <div class="card" id="card-${kind}" data-kind="${kind}">
+	        container.innerHTML += `
+	          <div class="card" id="card-${kind}" data-kind="${kind}">
             <div class="card-head">
               <span class="icon">${renderKindIcon(c)}</span>
               <span class="label">${esc(c.label)}</span>
@@ -732,28 +2036,28 @@
                 <button class="btn-sm btn-edit" onclick="toggleEdit('${kind}')">编辑</button>
                 <button class="btn-sm" id="retest-${kind}" onclick="testOne('${kind}')">重测</button>
               </span>
-            </div>
-            ${c.tip ? `<div class="card-tip">${esc(c.tip)}</div>` : ''}
-            <div class="edit-panel" id="edit-${kind}">
-              <label>镜像地址（每行一个）</label>
-              <textarea id="mirrors-${kind}">${esc(c.mirrors.join('\n'))}</textarea>
-              <div class="muted" style="font-size:12px;margin-top:6px" id="disabled-${kind}"></div>
-              <div class="edit-row">
-                <div><label>测试目标</label><input id="target-${kind}" value="${esc(c.target)}" /></div>
-                <div><label>下载大小 (MB)</label><input id="mb-${kind}" type="number" min="1" max="200" value="${c.sample_mb}" /></div>
-              </div>
+	            </div>
+	            ${c.tip ? `<div class="card-tip">${esc(c.tip)}</div>` : ''}
+	            <div class="edit-panel" id="edit-${kind}">
+	              <label for="mirrors-${kind}">镜像地址（每行一个）</label>
+	              <textarea id="mirrors-${kind}">${esc(c.mirrors.join('\n'))}</textarea>
+	              <div class="muted" style="font-size:12px;margin-top:6px" id="disabled-${kind}"></div>
+	              <div class="edit-row">
+	                <div><label for="target-${kind}">测试目标</label><input id="target-${kind}" value="${esc(c.target)}" /></div>
+	                <div><label for="mb-${kind}">下载大小 (MB)</label><input id="mb-${kind}" type="number" min="1" max="200" value="${c.sample_mb}" /></div>
+	              </div>
               <div class="edit-foot">
                 <button class="link-btn" onclick="resetKind('${kind}')">恢复默认</button>
                 <button class="link-btn" style="margin-left:12px" onclick="clearDisabledMirrors('${kind}')">清空禁用</button>
               </div>
             </div>
             <div class="spinner" id="spin-${kind}"><span class="dots">测速中...</span></div>
-            <details class="run-log" id="logwrap-${kind}">
-              <summary>进度日志</summary>
-              <div class="test-log" id="log-${kind}"></div>
-            </details>
             <div class="results" id="res-${kind}"></div>
             <div id="actions-${kind}"></div>
+            <div class="run-log" id="logwrap-${kind}">
+              <div class="run-log-head">进度日志</div>
+              <div class="test-log" id="log-${kind}"></div>
+            </div>
           </div>
         `;
       }
@@ -764,6 +2068,10 @@
       }
       initTabs();
       applyTabFilter();
+      for (const kind of ALL_KINDS) {
+        if (!defaults[kind]) continue;
+        renderResults(kind, { results: [] });
+      }
       hydrateCachedResults();
     }
 
@@ -855,6 +2163,7 @@
       document.getElementById('mirrors-' + kind).value = d.mirrors.join('\n');
       document.getElementById('target-' + kind).value = d.target;
       document.getElementById('mb-' + kind).value = d.sample_mb;
+      renderActions(kind, lastResults[kind] || []);
     }
 
     function readConfig(kind) {
@@ -901,6 +2210,7 @@
       if (!defaults[kind]) return;
       defaults[kind].disabled_mirrors = [];
       updateDisabledInfo(kind);
+      renderActions(kind, lastResults[kind] || []);
       if (Array.isArray(lastResults[kind]) && lastResults[kind].length) {
         renderResults(kind, { results: lastResults[kind] });
       }
@@ -958,14 +2268,21 @@
     /* ── action panels per kind ── */
     function renderActions(kind, results) {
       const el = document.getElementById('actions-' + kind);
-      const okResults = results.filter(r => r.ok);
-      if (!okResults.length) { el.innerHTML = ''; return; }
+      const safeResults = Array.isArray(results) ? results : [];
+      const okResults = safeResults.filter(r => r.ok);
+      const preferred = getPreferredMirror(kind, safeResults);
+      if (!preferred.mirror) { el.innerHTML = ''; return; }
+      const preferredMirrorResult = okResults[0] || { mirror: preferred.mirror };
+      const sourceNote = renderActionSourceNote(kind, preferred);
 
       if (kind === 'docker') {
-        const top5 = okResults.slice(0, 5).map(r => r.mirror);
+        const top5 = okResults.length
+          ? okResults.slice(0, 5).map(r => r.mirror)
+          : [preferred.mirror];
         const daemonJson = JSON.stringify({"registry-mirrors": top5}, null, 2);
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 Docker daemon.json（前 ${top5.length} 名）</div>
             ${renderPathHint({
               linux: '/etc/docker/daemon.json',
@@ -974,9 +2291,10 @@
             })}
             <div class="act-code" id="daemon-json">${esc(daemonJson)}</div>
             <button class="btn-copy" onclick="copyText(document.getElementById('daemon-json').textContent, this)">复制 JSON</button>
-            <div style="margin-top:14px">
+            <div class="action-section">
               <div class="act-title">生成 docker pull 命令</div>
               <div class="act-row">
+                <label class="sr-only" for="docker-image-input">Docker 镜像名</label>
                 <input id="docker-image-input" placeholder="输入镜像名，如 nginx:latest" value="" />
               </div>
               <div id="docker-pull-cmds"></div>
@@ -992,7 +2310,7 @@
           top5.forEach((m, i) => {
             const cmd = `docker pull ${m.replace(/^https?:\/\//, '')}/${img}`;
             html += `<div class="act-row" style="margin-top:4px">
-              <code class="mono" style="flex:1;font-size:12px;color:#e2e8f0">${esc(cmd)}</code>
+              <code class="mono" style="flex:1;font-size:12px">${esc(cmd)}</code>
               <button class="btn-copy" onclick="copyText('${cmd.replace(/'/g,"\\'")}', this)">复制</button>
             </div>`;
           });
@@ -1002,19 +2320,22 @@
       }
 
       else if (kind === 'github') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const target = document.getElementById('target-github').value.trim();
         const defaultRepo = (defaults.git && defaults.git.target) ? defaults.git.target : 'owner/repo';
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">通过最快代理下载</div>
             <div class="act-row">
+              <label class="sr-only" for="github-dl-url">GitHub Release 文件 URL</label>
               <input id="github-dl-url" value="${esc(target)}" placeholder="GitHub Release 文件 URL" />
               <button class="btn-dl" id="github-dl-btn">下载</button>
             </div>
-            <div style="margin-top:14px">
+            <div class="action-section">
               <div class="act-title">通过最快代理 Clone</div>
               <div class="act-row">
+                <label class="sr-only" for="github-clone-repo">GitHub 仓库地址</label>
                 <input id="github-clone-repo" value="${esc(defaultRepo)}" placeholder="owner/repo 或仓库 URL" />
               </div>
               <div id="github-clone-cmds"></div>
@@ -1044,11 +2365,11 @@
           const cmd2 = `git clone ${directUrl}`;
           cloneCmdsEl.innerHTML = `
             <div class="act-row" style="margin-top:4px">
-              <code class="mono" style="flex:1;font-size:12px;color:#e2e8f0">${esc(cmd1)}</code>
+              <code class="mono" style="flex:1;font-size:12px">${esc(cmd1)}</code>
               <button class="btn-copy" data-copy-cmd="${esc(cmd1)}">复制</button>
             </div>
             <div class="act-row" style="margin-top:4px">
-              <code class="mono" style="flex:1;font-size:12px;color:#e2e8f0">${esc(cmd2)}</code>
+              <code class="mono" style="flex:1;font-size:12px">${esc(cmd2)}</code>
               <button class="btn-copy" data-copy-cmd="${esc(cmd2)}">复制</button>
             </div>
           `;
@@ -1061,7 +2382,7 @@
       }
 
       else if (kind === 'pip') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const pipTempCmd = `pip install -i ${fastest.mirror}/simple <package>`;
         const pipPermCmd = `pip config set global.index-url ${fastest.mirror}/simple`;
         const uvTempBash = `export UV_INDEX_URL=${fastest.mirror}/simple`;
@@ -1073,6 +2394,7 @@
         const uvWindowsCode = `# 临时（当前 PowerShell 会话）\n${uvTempPwsh}\n\n# 永久（写入 $PROFILE）\n${uvPermPwsh}\n\n# 项目级（永久）\n${uvToml}`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 pip 使用最快镜像</div>
             ${renderPathHint({
               linux: '~/.config/pip/pip.conf',
@@ -1083,7 +2405,7 @@
             <div class="act-code"># 临时（当前命令）\n${esc(pipTempCmd)}\n\n# 永久（写入 pip 配置）\n${esc(pipPermCmd)}</div>
             <button class="btn-copy" onclick="copyText(\`${pipTempCmd}\`, this)">复制临时 pip 命令</button>
             <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${pipPermCmd}\`, this)">复制永久 pip 命令</button>
-            <div style="margin-top:14px">
+            <div class="action-section">
               <div class="act-title">配置 uv 使用最快镜像</div>
               ${renderPathHint({
                 project: 'pyproject.toml',
@@ -1099,12 +2421,13 @@
       }
 
       else if (kind === 'npm') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const tempCmd = `npm --registry ${fastest.mirror} install <package>`;
         const permGlobalCmd = `npm config set registry ${fastest.mirror}`;
         const permProjectCmd = `npm config set registry ${fastest.mirror} --location=project`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 npm 使用最快镜像</div>
             ${renderPathHint({
               linux: '~/.npmrc',
@@ -1122,13 +2445,14 @@
       }
 
       else if (kind === 'maven') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const mirrorId = 'fastest-maven';
         const settingsXml = `<settings>\n  <mirrors>\n    <mirror>\n      <id>${mirrorId}</id>\n      <name>Fastest Maven Mirror</name>\n      <url>${fastest.mirror}</url>\n      <mirrorOf>*</mirrorOf>\n    </mirror>\n  </mirrors>\n</settings>`;
         const gradleGroovy = `repositories {\n  maven { url '${fastest.mirror}' }\n  mavenCentral()\n}`;
         const gradleKts = `repositories {\n  maven(url = \"${fastest.mirror}\")\n  mavenCentral()\n}`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 Maven / Gradle 使用最快镜像</div>
             ${renderPathHint({
               linux: '~/.m2/settings.xml',
@@ -1138,7 +2462,7 @@
             })}
             <div class="act-code">${esc(settingsXml)}</div>
             <button class="btn-copy" onclick="copyText(\`${settingsXml}\`, this)">复制永久 settings.xml</button>
-            <div style="margin-top:14px">
+            <div class="action-section">
               <div class="act-title">Gradle (Groovy DSL)</div>
               ${renderPathHint({
                 linux: '~/.gradle/init.gradle',
@@ -1150,7 +2474,7 @@
               <div class="act-code">${esc(gradleGroovy)}</div>
               <button class="btn-copy" onclick="copyText(\`${gradleGroovy}\`, this)">复制永久 Groovy 配置</button>
             </div>
-            <div style="margin-top:14px">
+            <div class="action-section">
               <div class="act-title">Gradle (Kotlin DSL)</div>
               ${renderPathHint({
                 linux: '~/.gradle/init.gradle.kts',
@@ -1167,7 +2491,7 @@
       }
 
       else if (kind === 'go') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const tempBashCmd = `export GOPROXY=${fastest.mirror},direct`;
         const tempPwshCmd = `$env:GOPROXY='${fastest.mirror},direct'`;
         const permCmd = `go env -w GOPROXY=${fastest.mirror},direct`;
@@ -1175,6 +2499,7 @@
         const windowsCode = `# 临时（当前 PowerShell 会话）\n${tempPwshCmd}\n\n# 永久（写入 go env）\n${permCmd}`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 Go 使用最快代理</div>
             ${renderPathHint({
               linux: '~/.config/go/env',
@@ -1188,11 +2513,12 @@
       }
 
       else if (kind === 'cargo') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
         const cargoToml = `[source.crates-io]\nreplace-with = "fastest"\n\n[source.fastest]\nregistry = "sparse+${base}/index/"`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 Cargo 使用最快镜像</div>
             ${renderPathHint({
               linux: '~/.cargo/config.toml',
@@ -1207,13 +2533,14 @@
       }
 
       else if (kind === 'nuget') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const idx = renderNugetIndexUrl(fastest.mirror);
         const tempCmd = `dotnet restore --source ${idx}`;
         const permCmd = `dotnet nuget add source ${idx} -n fastest-nuget`;
         const cfg = `<configuration>\n  <packageSources>\n    <add key="fastest-nuget" value="${idx}" />\n  </packageSources>\n</configuration>`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 NuGet 使用最快源</div>
             ${renderPathHint({
               linux: '~/.nuget/NuGet/NuGet.Config',
@@ -1224,7 +2551,7 @@
             <div class="act-code"># 临时（当前 restore）\n${esc(tempCmd)}\n\n# 永久（写入 NuGet 源）\n${esc(permCmd)}</div>
             <button class="btn-copy" onclick="copyText(\`${tempCmd}\`, this)">复制临时 restore 命令</button>
             <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permCmd}\`, this)">复制永久 dotnet 命令</button>
-            <div style="margin-top:14px">
+            <div class="action-section">
               <div class="act-title">NuGet.Config 片段（永久）</div>
               <div class="act-code">${esc(cfg)}</div>
               <button class="btn-copy" onclick="copyText(\`${cfg}\`, this)">复制永久 NuGet.Config XML</button>
@@ -1234,7 +2561,7 @@
       }
 
       else if (kind === 'conda') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
         const tempCmd = `conda install -c ${base}/pkgs/main -c ${base}/pkgs/r <package>`;
         const permCmdMain = `conda config --add default_channels ${base}/pkgs/main`;
@@ -1242,6 +2569,7 @@
         const condarc = `default_channels:\n  - ${base}/pkgs/main\n  - ${base}/pkgs/r\nshow_channel_urls: true`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 Conda 使用最快镜像</div>
             ${renderPathHint({
               linux: '~/.condarc',
@@ -1252,7 +2580,7 @@
             <div class="act-code"># 临时（当前安装命令）\n${esc(tempCmd)}\n\n# 永久（写入 conda 配置）\n${esc(permCmdMain)}\n${esc(permCmdR)}</div>
             <button class="btn-copy" onclick="copyText(\`${tempCmd}\`, this)">复制临时 conda 命令</button>
             <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permCmdMain}\n${permCmdR}\`, this)">复制永久 conda 命令</button>
-            <div style="margin-top:14px">
+            <div class="action-section">
               <div class="act-title">.condarc 片段（永久）</div>
               <div class="act-code">${esc(condarc)}</div>
               <button class="btn-copy" onclick="copyText(\`${condarc}\`, this)">复制永久 .condarc</button>
@@ -1262,7 +2590,7 @@
       }
 
       else if (kind === 'homebrew') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
         const tempBashCmd = `export HOMEBREW_BOTTLE_DOMAIN=${base}\nexport HOMEBREW_API_DOMAIN=${base}`;
         const tempPwshCmd = `$env:HOMEBREW_BOTTLE_DOMAIN='${base}'\n$env:HOMEBREW_API_DOMAIN='${base}'`;
@@ -1272,6 +2600,7 @@
         const windowsCode = `# 临时（当前 PowerShell 会话）\n${tempPwshCmd}\n\n# 永久（写入 $PROFILE）\n${permPwshCmd}`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 Homebrew 使用最快镜像</div>
             ${renderPathHint({
               linux: '~/.bashrc',
@@ -1285,13 +2614,14 @@
       }
 
       else if (kind === 'flatpak') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
         const repoUrl = `${base}/repo`;
         const addCmd = `flatpak remote-add --if-not-exists flathub ${repoUrl}`;
         const modifyCmd = `flatpak remote-modify --url=${repoUrl} flathub`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 Flatpak 使用最快镜像</div>
             ${renderPathHint({
               linux: '/var/lib/flatpak/repo/config（系统级）',
@@ -1305,12 +2635,13 @@
       }
 
       else if (kind === 'apt') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
         const line = `deb ${base}/ubuntu noble main restricted universe multiverse`;
         const cmd = `sudo sed -i 's|http://archive.ubuntu.com/ubuntu|${base}/ubuntu|g' /etc/apt/sources.list && sudo apt update`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 APT 使用最快镜像</div>
             ${renderPathHint({
               linux: '/etc/apt/sources.list 或 /etc/apt/sources.list.d/*.list',
@@ -1323,11 +2654,12 @@
       }
 
       else if (kind === 'yum') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
         const repoCfg = `[baseos]\nname=BaseOS\nbaseurl=${base}/centos-stream/$releasever-stream/BaseOS/$basearch/os/\nenabled=1\ngpgcheck=0`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 YUM / DNF 使用最快镜像</div>
             ${renderPathHint({
               linux: '/etc/yum.repos.d/*.repo',
@@ -1340,12 +2672,13 @@
       }
 
       else if (kind === 'apk') {
-        const fastest = okResults[0];
+        const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
         const repos = `${base}/alpine/latest-stable/main\n${base}/alpine/latest-stable/community`;
         const cmd = `printf '%s\\n' '${base}/alpine/latest-stable/main' '${base}/alpine/latest-stable/community' | sudo tee /etc/apk/repositories >/dev/null && sudo apk update`;
         el.innerHTML = `
           <div class="action-panel">
+            ${sourceNote}
             <div class="act-title">配置 Alpine APK 使用最快镜像</div>
             ${renderPathHint({
               linux: '/etc/apk/repositories',
@@ -1365,14 +2698,50 @@
       attachCopyButtons(el);
     }
 
+    function captureRunningRowPositions(container) {
+      const positions = new Map();
+      if (!container) return positions;
+      container.querySelectorAll('tr[data-row-key]').forEach((row) => {
+        positions.set(row.dataset.rowKey, row.getBoundingClientRect().top);
+      });
+      return positions;
+    }
+
+    function animateRunningRowReorder(container, previousPositions) {
+      if (!container || !previousPositions || !previousPositions.size) return;
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      container.querySelectorAll('tr[data-row-key]').forEach((row) => {
+        const prevTop = previousPositions.get(row.dataset.rowKey);
+        if (!Number.isFinite(prevTop)) return;
+        const nextTop = row.getBoundingClientRect().top;
+        const deltaY = prevTop - nextTop;
+        if (Math.abs(deltaY) < 1) return;
+        row.classList.add('result-row-moving');
+        row.style.transition = 'none';
+        row.style.transform = `translateY(${deltaY}px)`;
+        requestAnimationFrame(() => {
+          row.style.transition = 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)';
+          row.style.transform = 'translateY(0)';
+        });
+        row.addEventListener('transitionend', () => {
+          row.classList.remove('result-row-moving');
+          row.style.transition = '';
+          row.style.transform = '';
+        }, { once: true });
+      });
+    }
+
     /* ── render results ── */
     function renderResults(kind, data, meta = {}) {
       const el = document.getElementById('res-' + kind);
+      const previousPositions = meta.running ? captureRunningRowPositions(el) : null;
       const results = data.results || [];
       lastResults[kind] = results;
-      if (!results.length) { el.innerHTML = '<div class="muted" style="padding:8px 0">无结果</div>'; return; }
+      const configuredRows = getConfiguredMirrorRows(kind);
+      const pendingSet = new Set((meta.pendingMirrors || []).map(normalizeMirrorValue));
 
-      const okResults = results.filter(r => r.ok);
+      const okResults = results.filter(r => r.ok && r.download);
+      const probeOnlyResults = results.filter(r => r.probe_only);
       const failResults = results.filter(r => !r.ok);
       const maxSpeed = Math.max(...okResults.map(r => r.download?.speed_mbps || 0), 0.01);
 
@@ -1390,70 +2759,265 @@
         }
         summaryEl.textContent = summary;
       } else {
-        summaryEl.textContent = elapsedText ? `0/${results.length} 成功 · 总耗时 ${elapsedText}` : `0/${results.length} 成功`;
+        let summary = results.length ? `0/${results.length} 成功` : `未测速 · ${configuredRows.length} 个镜像`;
+        if (probeOnlyResults.length) summary = `完成初筛 ${probeOnlyResults.length} 个候选`;
+        if (elapsedText) summary += ` · 总耗时 ${elapsedText}`;
+        summaryEl.textContent = summary;
       }
 
       let html = '';
+      const disabledSet = new Set(
+        (((defaults[kind] && defaults[kind].disabled_mirrors) || []).map(normalizeMirrorValue))
+      );
+      const renderResultColgroup = () => `
+        <colgroup>
+          <col class="col-mirror">
+          <col class="col-speed">
+          <col class="col-latency">
+          <col class="col-ttfb">
+          <col class="col-status">
+          <col class="col-actions">
+        </colgroup>
+      `;
+      const resultMap = new Map(results.map(item => [normalizeMirrorValue(item.mirror), item]));
+
+      if (meta.running) {
+        const orderedRows = sortRunningRows(configuredRows, resultMap, pendingSet, disabledSet);
+        html += `<table>${renderResultColgroup()}<thead><tr><th>镜像地址</th><th>速度</th><th>延迟</th><th>TTFB</th><th>状态</th><th>操作</th></tr></thead><tbody>`;
+        orderedRows.forEach((row) => {
+          const mirrorKey = normalizeMirrorValue(row.mirror);
+          const record = resultMap.get(mirrorKey);
+          const errorText = String(record?.error || '失败');
+          const isDisabled = disabledSet.has(mirrorKey);
+          const isPending = pendingSet.has(mirrorKey);
+          const disableAction = isDisabled
+            ? '<span class="muted" style="font-size:12px">已禁用</span>'
+            : `<button class="btn-copy btn-disable-mirror" style="margin-right:6px;padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(row.mirror)}">禁用</button>`;
+          const retryAction = record
+            ? `<button class="btn-copy btn-retry-mirror" style="padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(row.mirror)}"${record.probe_only ? ' data-force-full="1"' : ''}>${record.probe_only ? '精测速' : '重试'}</button>`
+            : '';
+
+          let speedCell = renderSpeedMetric('-', null, 'muted');
+          let latencyCell = renderMetricCell('-', 'muted');
+          let ttfbCell = renderMetricCell('-', 'muted');
+          let statusCell = isDisabled ? renderMetricCell('禁用', 'muted') : renderMetricCell('未测速', 'muted');
+
+          if (isPending && (!record || record.probe_only)) {
+            speedCell = renderSpeedMetric('测速中...');
+            latencyCell = renderMetricCell(record?.ping ? record.ping.latency_ms + ' ms' : '检测中...');
+            ttfbCell = renderMetricCell('检测中...', 'muted');
+            statusCell = renderMetricCell('-', 'muted');
+          } else if (record?.ok && record.download) {
+            const speed = record.download.speed_mbps || 0;
+            const pct = Math.round((speed / maxSpeed) * 100);
+            speedCell = renderSpeedMetric(`${speed} MB/s`, pct);
+            latencyCell = renderMetricCell(record.ping ? record.ping.latency_ms + ' ms' : '-');
+            ttfbCell = renderMetricCell(record.download ? record.download.time_to_first_byte_s + 's' : '-');
+            statusCell = renderMetricCell('成功', 'ok');
+          } else if (record?.probe_only) {
+            speedCell = renderSpeedMetric('-');
+            latencyCell = renderMetricCell(record.ping ? record.ping.latency_ms + ' ms' : '-');
+            statusCell = renderMetricCell('初筛通过', 'muted');
+          } else if (record && !record.ok) {
+            speedCell = renderSpeedMetric('-');
+            statusCell = `<div class="metric-stack ${isDisabled ? 'muted' : 'fail'}"><div class="metric-main error-brief status-with-hint" title="${esc(errorText)}" aria-label="${esc(errorText)}">${isDisabled ? '禁用' : '失败'}<span class="status-hint-icon" aria-hidden="true">?</span></div><div class="speed-bar placeholder"></div></div>`;
+          }
+
+          html += `<tr data-row-key="${esc(mirrorKey)}">
+            <td class="mono">${esc(row.mirror)}</td>
+            <td>${speedCell}</td>
+            <td>${latencyCell}</td>
+            <td>${ttfbCell}</td>
+            <td>${statusCell}</td>
+            <td class="cell-actions">${disableAction}${retryAction}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+        animateRunningRowReorder(el, previousPositions);
+        el.querySelectorAll('.btn-disable-mirror').forEach((btn) => {
+          btn.addEventListener('click', () => disableMirror(btn.dataset.kind, btn.dataset.mirror, btn));
+        });
+        el.querySelectorAll('.btn-retry-mirror').forEach((btn) => {
+          btn.addEventListener('click', () => retryMirror(btn.dataset.kind, btn.dataset.mirror, btn, {
+            forceFull: btn.dataset.forceFull === '1'
+          }));
+        });
+        renderActions(kind, results);
+        return;
+      }
+
       if (okResults.length) {
         const topOkLimit = kind === 'github' ? 3 : 5;
         const topOkResults = okResults.slice(0, topOkLimit);
         const restOkResults = okResults.slice(topOkLimit);
 
-        const renderOkTable = (rows, offset = 0) => {
-          let tableHtml = '<table><thead><tr><th>镜像地址</th><th>速度</th><th>延迟</th><th>TTFB</th><th>状态</th></tr></thead><tbody>';
+        const renderOkTable = (rows, offset = 0, withHead = true) => {
+          let tableHtml = `<table>${renderResultColgroup()}`;
+          if (withHead) {
+            tableHtml += `<thead><tr><th>镜像地址</th><th>速度</th><th>延迟</th><th>TTFB</th><th>状态</th><th>操作</th></tr></thead>`;
+          }
+          tableHtml += `<tbody>`;
           rows.forEach((r, i) => {
             const rank = offset + i;
             const speed = r.download ? r.download.speed_mbps : 0;
             const pct = Math.round((speed / maxSpeed) * 100);
             const ping = r.ping ? r.ping.latency_ms + ' ms' : '-';
             const ttfb = r.download ? r.download.time_to_first_byte_s + 's' : '-';
-            const trophy = rank === 0 ? '<span class="trophy">&#127942;</span>' : '';
+            const isDisabled = disabledSet.has(normalizeMirrorValue(r.mirror));
+            const disableAction = isDisabled
+              ? '<span class="muted" style="font-size:12px">已禁用</span>'
+              : `<button class="btn-copy btn-disable-mirror" style="margin-right:6px;padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">禁用</button>`;
+            const retryAction = `<button class="btn-copy btn-retry-mirror" style="padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">重试</button>`;
             tableHtml += `<tr>
               <td class="mono">${esc(r.mirror)}</td>
-              <td>${trophy}${speed} MB/s<div class="speed-bar"><div class="speed-fill" style="width:${pct}%"></div></div></td>
-              <td>${esc(ping)}</td>
-              <td>${esc(ttfb)}</td>
-              <td class="ok">成功</td>
+              <td>${renderSpeedMetric(`${rank === 0 ? 'TOP ' : ''}${speed} MB/s`, pct)}</td>
+              <td>${renderMetricCell(ping)}</td>
+              <td>${renderMetricCell(ttfb)}</td>
+              <td>${renderMetricCell('成功', 'ok')}</td>
+              <td class="cell-actions">${disableAction}${retryAction}</td>
             </tr>`;
           });
           tableHtml += '</tbody></table>';
           return tableHtml;
         };
 
-        html += renderOkTable(topOkResults, 0);
+        html += renderOkTable(topOkResults, 0, true);
 
         if (restOkResults.length) {
-          html += `<details class="fail-fold"><summary class="muted">其余 ${restOkResults.length} 个成功结果（点击展开）</summary>`;
-          html += renderOkTable(restOkResults, topOkLimit);
-          html += '</details>';
+          html += renderOkTable(restOkResults, topOkLimit, false);
         }
       }
 
       if (failResults.length) {
-        const disabledSet = new Set(
-          (((defaults[kind] && defaults[kind].disabled_mirrors) || []).map(normalizeMirrorValue))
-        );
-        html += `<details class="fail-fold"><summary class="muted">${failResults.length} 个失败（点击展开）</summary>`;
-        html += '<table><thead><tr><th>镜像地址</th><th colspan="3">错误</th><th>状态</th></tr></thead><tbody>';
+        html += `<table>${renderResultColgroup()}<tbody>`;
         failResults.forEach(r => {
           const isDisabled = disabledSet.has(normalizeMirrorValue(r.mirror));
           const disableAction = isDisabled
-            ? ''
+            ? '<span class="muted" style="font-size:12px">已禁用</span>'
             : `<button class="btn-copy btn-disable-mirror" style="margin-right:6px;padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">禁用</button>`;
+          const retryAction = `<button class="btn-copy btn-retry-mirror" style="padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">重试</button>`;
+          const errorText = String(r.error || '未知错误');
           html += `<tr>
             <td class="mono">${esc(r.mirror)}</td>
-            <td colspan="3" class="muted" style="font-size:12px">${esc(r.error || '未知错误')}</td>
-            <td class="${isDisabled ? 'muted' : 'fail'}" style="white-space:nowrap">${disableAction}${isDisabled ? '禁用' : '失败'}</td>
+            <td colspan="3" class="muted" style="font-size:12px"></td>
+            <td class="${isDisabled ? 'muted' : 'fail'}" title="${esc(errorText)}" aria-label="${esc(errorText)}"><span class="status-with-hint">${isDisabled ? '禁用' : '失败'}<span class="status-hint-icon" aria-hidden="true">?</span></span></td>
+            <td class="cell-actions">${disableAction}${retryAction}</td>
           </tr>`;
         });
-        html += '</tbody></table></details>';
+        html += '</tbody></table>';
+      }
+
+      if (probeOnlyResults.length) {
+        html += `<div class="muted" style="padding:10px 0 6px">${probeOnlyResults.length} 个初筛通过，未进入精测速</div>`;
+        html += `<table>${renderResultColgroup()}<thead><tr><th>镜像地址</th><th>速度</th><th>延迟</th><th>TTFB</th><th>状态</th><th>操作</th></tr></thead><tbody>`;
+        probeOnlyResults.sort(rankProbeResults).forEach(r => {
+          const ping = r.ping ? r.ping.latency_ms + ' ms' : '-';
+          html += `<tr>
+            <td class="mono">${esc(r.mirror)}</td>
+            <td>${renderSpeedMetric('-')}</td>
+            <td>${renderMetricCell(ping)}</td>
+            <td>${renderMetricCell('-', 'muted')}</td>
+            <td>${renderMetricCell('初筛通过', 'muted')}</td>
+            <td class="cell-actions"><button class="btn-copy btn-retry-mirror" style="padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}" data-force-full="1">精测速</button></td>
+          </tr>`;
+          html += `<tr>
+            <td></td>
+            <td colspan="5" class="muted" style="font-size:12px;padding-top:0">${esc(r.skipped_reason || '初筛通过，但未进入本轮精测速')}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+      }
+
+      if (!results.length && configuredRows.length) {
+        const disabledSet = new Set(
+          (((defaults[kind] && defaults[kind].disabled_mirrors) || []).map(normalizeMirrorValue))
+        );
+        html += `<table>${renderResultColgroup()}<thead><tr><th>镜像地址</th><th>速度</th><th>延迟</th><th>TTFB</th><th>状态</th><th>操作</th></tr></thead><tbody>`;
+        configuredRows.forEach((row) => {
+          const isDisabled = disabledSet.has(normalizeMirrorValue(row.mirror));
+          const disableAction = isDisabled
+            ? '<span class="muted" style="font-size:12px">已禁用</span>'
+            : `<button class="btn-copy btn-disable-mirror" style="margin-right:6px;padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(row.mirror)}">禁用</button>`;
+          html += `<tr>
+            <td class="mono">${esc(row.mirror)}</td>
+            <td>${renderSpeedMetric('-')}</td>
+            <td>${renderMetricCell('-', 'muted')}</td>
+            <td>${renderMetricCell('-', 'muted')}</td>
+            <td>${renderMetricCell(isDisabled ? '禁用' : '未测速', 'muted')}</td>
+            <td class="cell-actions">${disableAction}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
       }
 
       el.innerHTML = html;
       el.querySelectorAll('.btn-disable-mirror').forEach((btn) => {
         btn.addEventListener('click', () => disableMirror(btn.dataset.kind, btn.dataset.mirror, btn));
       });
+      el.querySelectorAll('.btn-retry-mirror').forEach((btn) => {
+        btn.addEventListener('click', () => retryMirror(btn.dataset.kind, btn.dataset.mirror, btn, {
+          forceFull: btn.dataset.forceFull === '1'
+        }));
+      });
       renderActions(kind, results);
+    }
+
+    async function retryMirror(kind, mirror, btn, options = {}) {
+      const currentRun = activeRuns[kind];
+      if (currentRun && currentRun.running) {
+        appendProgressLog(kind, `当前整卡测速仍在进行，暂不执行单条重试：${mirror}`, 'info');
+        return;
+      }
+      const cfg = readConfig(kind);
+      const original = btn ? btn.textContent : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '重试中...';
+      }
+      appendProgressLog(kind, `单条重试：${mirror}`, 'info');
+      try {
+        const resp = await fetch('/api/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            kind,
+            mirrors: [mirror],
+            target: cfg.target,
+            sample_mb: cfg.sample_mb,
+            probe_only: false
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || '请求失败');
+        const one = (data.results && data.results[0]) || { kind, mirror, ok: false, error: '无结果' };
+        const merged = (lastResults[kind] || []).filter(item => normalizeMirrorValue(item.mirror) !== normalizeMirrorValue(mirror));
+        merged.push(one);
+        const finalResults = sortTestResults(merged);
+        const payload = {
+          kind,
+          target: cfg.target,
+          sample_mb: cfg.sample_mb,
+          elapsed_s: Number(data.elapsed_s || 0),
+          results: finalResults,
+        };
+        lastResults[kind] = finalResults;
+        renderResults(kind, payload);
+        appendProgressLog(
+          kind,
+          one.ok
+            ? `单条重试成功 ${mirror} · ${Number.isFinite(one.download?.speed_mbps) ? one.download.speed_mbps + ' MB/s' : '-'}`
+            : `单条重试失败 ${mirror} · ${one.error || '未知错误'}`,
+          one.ok ? 'ok' : 'fail'
+        );
+      } catch (e) {
+        appendProgressLog(kind, `单条重试失败 ${mirror} · ${e.message || e}`, 'fail');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = original || (options.forceFull ? '精测速' : '重试');
+        }
+      }
     }
 
     /* ── test ── */
@@ -1478,28 +3042,22 @@
       if (!activeMirrors.length) { alert('当前镜像都被禁用，请先清空禁用或补充镜像'); return; }
 
       card.className = 'card testing';
-      spin.className = 'spinner show';
-      res.innerHTML = '';
-      actEl.innerHTML = '';
+      spin.className = 'spinner';
       btn.disabled = false;
       btn.textContent = '中断';
       const summaryEl = document.getElementById('summary-' + kind);
       const total = activeMirrors.length;
       let done = 0;
-      summaryEl.textContent = `测速中... ${done}/${total}`;
+      summaryEl.textContent = '';
       const startedAt = performance.now();
       const runState = { running: true, aborted: false, controllers: new Set() };
       activeRuns[kind] = runState;
-      const logWrapEl = document.getElementById('logwrap-' + kind);
-      if (logWrapEl) logWrapEl.open = true;
       clearProgressLog(kind);
+      let liveResults = [];
+      renderResults(kind, { results: liveResults }, { running: true, pendingMirrors: activeMirrors });
 
       try {
-        const queue = activeMirrors.slice();
-        const results = [];
-        const concurrency = Math.min(4, total);
-        appendProgressLog(kind, `开始测速：${total} 个镜像，并发 ${concurrency}`, 'info');
-        const runSingle = async (mirror) => {
+        const runSingle = async (mirror, options = {}) => {
           const controller = new AbortController();
           runState.controllers.add(controller);
           try {
@@ -1512,6 +3070,7 @@
                 mirrors: [mirror],
                 target: cfg.target,
                 sample_mb: cfg.sample_mb,
+                probe_only: Boolean(options.probeOnly),
               })
             });
             const data = await resp.json();
@@ -1528,49 +3087,95 @@
             return { kind, mirror, ok: false, error: e.message || String(e) };
           } finally {
             runState.controllers.delete(controller);
-            done += 1;
-            summaryEl.textContent = runState.aborted ? `已中断 ${done}/${total}` : `测速中... ${done}/${total}`;
           }
         };
-
-        const workers = Array.from({ length: concurrency }, async () => {
-          while (queue.length && !runState.aborted) {
-            const mirror = queue.shift();
-            if (!mirror) continue;
-            const one = await runSingle(mirror);
-            results.push(one);
-            if (one.ok) {
-              const speed = one.download?.speed_mbps;
-              appendProgressLog(
-                kind,
-                `${done}/${total} 成功 ${mirror} · ${Number.isFinite(speed) ? speed + ' MB/s' : '-'}`,
-                'ok'
-              );
+        const runStage = async (mirrors, options) => {
+          const stageResults = [];
+          let stageDone = 0;
+          const stageTotal = mirrors.length;
+          const pendingMirrors = mirrors.slice();
+          await Promise.all(pendingMirrors.map(async (mirror) => {
+            if (runState.aborted) return;
+            const one = await runSingle(mirror, options);
+            stageResults.push(one);
+            liveResults = sortTestResults(upsertTestResult(liveResults, one));
+            stageDone += 1;
+            done += 1;
+            const completedSet = new Set(stageResults.map(item => normalizeMirrorValue(item.mirror)));
+            const stillPending = pendingMirrors.filter(item => !completedSet.has(normalizeMirrorValue(item)));
+            renderResults(kind, { results: liveResults }, { running: true, pendingMirrors: stillPending });
+            if (options.probeOnly) {
+              if (one.ok) {
+                const ping = one.ping?.latency_ms;
+                appendProgressLog(
+                  kind,
+                  `${stageDone}/${stageTotal} 初筛通过 ${mirror} · ${Number.isFinite(ping) ? ping + ' ms' : '-'}`,
+                  'ok'
+                );
+              } else {
+                appendProgressLog(kind, `${stageDone}/${stageTotal} 初筛失败 ${mirror} · ${one.error || '未知错误'}`, 'fail');
+              }
             } else {
-              appendProgressLog(kind, `${done}/${total} 失败 ${mirror} · ${one.error || '未知错误'}`, 'fail');
+              if (one.ok) {
+                const speed = one.download?.speed_mbps;
+                appendProgressLog(
+                  kind,
+                  `${stageDone}/${stageTotal} 精测速成功 ${mirror} · ${Number.isFinite(speed) ? speed + ' MB/s' : '-'}`,
+                  'ok'
+                );
+              } else {
+                appendProgressLog(kind, `${stageDone}/${stageTotal} 精测速失败 ${mirror} · ${one.error || '未知错误'}`, 'fail');
+              }
             }
+          }));
+          if (runState.aborted) {
+            const remaining = pendingMirrors.filter((mirror) => !stageResults.some(item => normalizeMirrorValue(item.mirror) === normalizeMirrorValue(mirror)));
+            remaining.forEach((mirror) => {
+              stageResults.push({ kind, mirror, ok: false, error: '已中断' });
+            });
+            liveResults = sortTestResults([
+              ...liveResults.filter(item => !remaining.some(mirror => normalizeMirrorValue(mirror) === normalizeMirrorValue(item.mirror))),
+              ...remaining.map((mirror) => ({ kind, mirror, ok: false, error: '已中断' }))
+            ]);
+            renderResults(kind, { results: liveResults }, { running: true, pendingMirrors: [] });
+            done += remaining.length;
+            appendProgressLog(kind, `已中断，未开始的镜像已跳过：${remaining.length} 个`, 'info');
           }
-        });
-        await Promise.all(workers);
-        if (runState.aborted && queue.length) {
-          const remaining = queue.splice(0);
-          remaining.forEach((mirror) => {
-            results.push({ kind, mirror, ok: false, error: '已中断' });
-          });
-          done += remaining.length;
-          summaryEl.textContent = `已中断 ${done}/${total}`;
-          appendProgressLog(kind, `已中断，未开始的镜像已跳过：${remaining.length} 个`, 'info');
+          return stageResults;
+        };
+
+        let results = [];
+        if (TWO_PHASE_TEST_KINDS.has(kind)) {
+          appendProgressLog(kind, `开始初筛：${total} 个镜像，同时测速`, 'info');
+          const probeResults = await runStage(activeMirrors, { probeOnly: true });
+          const probeOk = probeResults.filter(r => r.ok).sort(rankProbeResults);
+          if (!runState.aborted) {
+            const candidateQueue = probeOk.map(r => r.mirror);
+            appendProgressLog(
+              kind,
+              candidateQueue.length
+                ? `初筛完成：${probeOk.length}/${total} 可用，进入精测速 ${candidateQueue.length} 个`
+                : `初筛完成：0/${total} 可用`,
+              'info'
+            );
+            if (candidateQueue.length) {
+              done = 0;
+              appendProgressLog(kind, `开始精测速：${candidateQueue.length} 个候选`, 'info');
+              const measuredResults = await runStage(candidateQueue, { probeOnly: false });
+              const probeFailures = probeResults.filter(r => !r.ok);
+              results = [...measuredResults, ...probeFailures];
+            } else {
+              results = probeResults;
+            }
+          } else {
+            results = probeResults;
+          }
+        } else {
+          appendProgressLog(kind, `开始测速：${total} 个镜像，同时测速`, 'info');
+          results = await runStage(activeMirrors, { probeOnly: false });
         }
 
-        results.sort((a, b) => {
-          const aOk = a.ok ? 0 : 1;
-          const bOk = b.ok ? 0 : 1;
-          if (aOk !== bOk) return aOk - bOk;
-          const aSpeed = (a.download && a.download.speed_bps) || 0;
-          const bSpeed = (b.download && b.download.speed_bps) || 0;
-          if (aSpeed !== bSpeed) return bSpeed - aSpeed;
-          return String(a.mirror || '').localeCompare(String(b.mirror || ''));
-        });
+        results = sortTestResults(results);
 
         const totalElapsedMs = performance.now() - startedAt;
         const data = {
@@ -1584,12 +3189,15 @@
         if (!runState.aborted) {
           saveResultCache(kind, data);
         }
-        const okCount = results.filter(item => item.ok).length;
+        const okCount = results.filter(item => item.ok && item.download).length;
+        const probeOnlyCount = results.filter(item => item.probe_only).length;
         if (runState.aborted) {
           appendProgressLog(kind, `已中断：${okCount}/${results.length} 成功，耗时 ${formatElapsedMs(totalElapsedMs)}`, 'info');
           card.className = 'card error';
         } else {
-          appendProgressLog(kind, `完成：${okCount}/${results.length} 成功，总耗时 ${formatElapsedMs(totalElapsedMs)}`, 'info');
+          let finalMessage = `完成：${okCount}/${results.length} 成功，总耗时 ${formatElapsedMs(totalElapsedMs)}`;
+          if (probeOnlyCount) finalMessage += `，另有 ${probeOnlyCount} 个仅完成初筛`;
+          appendProgressLog(kind, finalMessage, 'info');
           card.className = 'card done';
         }
       } catch (e) {
