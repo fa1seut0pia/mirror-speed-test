@@ -9,14 +9,7 @@
   <img src="./assert/image.png" alt="项目截图" width="720" />
 </p>
 
-一个零依赖的 Python 小工具，一键测试常见镜像源的延迟与下载速度。
-
-## 功能
-
-- 内置 16 类镜像源，开箱即用（含 Docker、GitHub、开发语言源、Linux 软件源）
-- 单类别并发测速（默认并发 4），展示速度、延迟、TTFB，结果按速度排序
-- 支持编辑镜像、测试目标和采样大小；支持失败镜像禁用/清空禁用
-- 配置修改仅当前会话生效；本地测速结果支持缓存与一键清理
+一个面向开发环境的镜像源测速与配置工具，支持常见镜像的延迟、 TTFB 和下载速度测试，可通过源码、本地二进制或 Docker 运行。
 
 ## 运行
 
@@ -46,14 +39,14 @@ Windows （PowerShell）：
 
 ## Docker
 
-本地构建和运行：
+本地构建并运行：
 
 ```bash
 docker build -t mirror-speed-test:local .
 docker run --rm -p 8080:8080 mirror-speed-test:local
 ```
 
-或者：
+也可以直接运行 GHCR 镜像：
 
 ```bash
 docker run --rm -p 8080:8080 ghcr.io/fa1seut0pia/mirror-speed-test:latest
