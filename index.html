@@ -313,33 +313,11 @@
       padding: 12px;
     }
 
-    .results-shell .panel-head {
-      padding-top: 0;
-      padding-left: 0;
-      padding-right: 0;
-      margin-bottom: 10px;
-    }
-
     .panel {
       border-radius: 14px;
       border: 1px solid var(--panel-border);
       background: rgba(18, 24, 33, 0.92);
       box-shadow: 0 8px 20px rgba(2, 7, 15, 0.1);
-    }
-
-    .panel-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 14px 16px 0;
-    }
-
-    .panel-title {
-      margin: 0;
-      font: 600 14px var(--font-display);
-      letter-spacing: 0.01em;
-      color: var(--text-main);
     }
 
     .panel-note {
@@ -353,13 +331,6 @@
     }
 
     .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
-    .tab-level-label {
-      margin: 0 0 8px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-faint);
-      letter-spacing: 0.04em;
-    }
     .tab-cats {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -617,21 +588,26 @@
     .card-head .label {
       font: 600 15px var(--font-display);
       letter-spacing: 0.01em;
-      flex: 1;
+      flex: 0 1 auto;
       min-width: 0;
     }
     .card-head .summary {
       font-size: 13px;
       color: var(--text-sub);
       text-align: right;
-      flex: 0 1 44ch;
+      flex: 1 1 auto;
       min-width: 0;
-      max-width: 100%;
+      max-width: none;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .card-head .actions { display: flex; gap: 6px; }
+    .card-head .actions {
+      display: flex;
+      gap: 6px;
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
     .card-tip {
       margin: 0 18px 10px;
       padding: 9px 10px;
@@ -1014,9 +990,6 @@
       color: #5b6e86;
       border-color: rgba(124, 140, 161, 0.2);
     }
-    body.theme-light .tab-level-label {
-      color: #7f92aa;
-    }
     body.theme-light .tab-kind-box {
       background: #f3f7fb;
       border-color: rgba(124, 140, 161, 0.2);
@@ -1312,22 +1285,14 @@
     <div class="layout">
       <aside class="sidebar">
         <div class="tab-shell panel">
-          <div class="panel-head">
-            <h2 class="panel-title">测速分类</h2>
-          </div>
           <div style="padding:12px 2px 0">
-            <div class="tab-level-label">分类</div>
             <div id="tabCategories" class="tabs tab-cats"></div>
             <div class="tab-kind-box">
-              <div class="tab-level-label">源类型</div>
               <div id="tabs" class="tabs tab-kinds"></div>
             </div>
           </div>
         </div>
         <div class="resource-panel panel">
-          <div class="panel-head">
-            <h2 class="panel-title">参考站点</h2>
-          </div>
           <div class="resource-quick" aria-label="高频参考站点">
             <a class="mirror-site-link" href="https://mirrors.huaweicloud.com/" target="_blank" rel="noopener">
               <span class="mirror-site-icon">H</span>
@@ -1425,9 +1390,6 @@
       </aside>
       <main class="main-panel" id="mainContent">
         <div class="panel results-shell">
-          <div class="panel-head">
-            <h2 class="panel-title">测速结果</h2>
-          </div>
           <div id="cards"></div>
         </div>
       </main>
