@@ -17,3 +17,6 @@ env/
 dist/
 build/
 *.spec
+
+.claude
+.codex
