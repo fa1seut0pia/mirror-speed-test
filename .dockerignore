@@ -1,0 +1,11 @@
+.git
+.github
+.idea
+.claude
+.codex
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+assert

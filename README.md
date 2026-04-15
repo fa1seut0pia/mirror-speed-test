@@ -44,6 +44,21 @@ Windows （PowerShell）：
 默认监听 `http://127.0.0.1:8080`。
 如果端口被占用，会自动递增尝试下一个可用端口。
 
+## Docker
+
+本地构建和运行：
+
+```bash
+docker build -t mirror-speed-test:local .
+docker run --rm -p 8080:8080 mirror-speed-test:local
+```
+
+或者：
+
+```bash
+docker run --rm -p 8080:8080 ghcr.io/fa1seut0pia/mirror-speed-test:latest
+```
+
 ## 可选环境变量
 
 | 变量 | 默认值 | 说明 |
