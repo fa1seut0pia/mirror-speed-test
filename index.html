@@ -223,6 +223,7 @@
     .run-log summary:focus-visible,
     details.fail-fold summary:focus-visible,
     .act-row input:focus-visible,
+    .act-row select:focus-visible,
     .edit-panel textarea:focus-visible,
     .edit-panel input:focus-visible {
       outline: none;
@@ -666,6 +667,7 @@
     .edit-panel textarea,
     .edit-panel input,
     .act-row input,
+    .act-row select,
     .act-code,
     .run-log {
       border: 1px solid var(--panel-border);
@@ -673,7 +675,8 @@
 
     .edit-panel textarea,
     .edit-panel input,
-    .act-row input {
+    .act-row input,
+    .act-row select {
       width: 100%;
       background: var(--code-bg);
       color: var(--text-main);
@@ -841,8 +844,75 @@
       color: var(--text-sub);
       margin-bottom: 8px;
     }
+    .act-label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: var(--text-sub);
+    }
     .act-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-    .act-row input { flex: 1; min-width: 180px; }
+    .act-row input,
+    .act-row select { flex: 1; min-width: 180px; }
+    .act-option-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin: 8px 0 10px;
+    }
+    .act-toggle-card {
+      display: grid;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      background: rgba(15, 26, 39, 0.64);
+    }
+    .act-toggle-title {
+      font-size: 12px;
+      color: var(--text-sub);
+      line-height: 1.35;
+    }
+    .switch {
+      position: relative;
+      display: inline-flex;
+      width: 42px;
+      height: 24px;
+    }
+    .switch input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      margin: 0;
+      cursor: pointer;
+    }
+    .switch-slider {
+      width: 100%;
+      height: 100%;
+      border-radius: 999px;
+      background: rgba(124, 140, 161, 0.24);
+      border: 1px solid rgba(124, 140, 161, 0.26);
+      transition: background 150ms ease, border-color 150ms ease;
+      position: relative;
+    }
+    .switch-slider::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #d8e7ff;
+      transition: transform 150ms ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    }
+    .switch input:checked + .switch-slider {
+      background: linear-gradient(135deg, rgba(46, 138, 245, 0.88), rgba(21, 179, 162, 0.84));
+      border-color: rgba(126, 206, 247, 0.62);
+    }
+    .switch input:checked + .switch-slider::after {
+      transform: translateX(18px);
+    }
     .act-code {
       background: var(--code-bg);
       border-radius: 8px;
@@ -1046,6 +1116,14 @@
       color: #f7fffd;
       border-color: rgba(27, 145, 132, 0.52);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 18px rgba(35, 149, 133, 0.14);
+    }
+    body.theme-light .act-toggle-card {
+      background: #f3f7fb;
+      border-color: rgba(124, 140, 161, 0.2);
+    }
+    body.theme-light .switch-slider {
+      background: rgba(124, 140, 161, 0.18);
+      border-color: rgba(124, 140, 161, 0.22);
     }
     body.theme-light .btn-sm,
     body.theme-light .btn-copy {
@@ -1548,29 +1626,48 @@
         : `确认下载 ${updateState.latest_version}？将自动选择最快 GitHub 镜像。`;
       if (!confirm(confirmText)) return;
       const original = btn ? btn.textContent : '更新';
+      const githubResults = Array.isArray(lastResults.github) ? lastResults.github : [];
+      const bestGithubResult = githubResults.find(item => item && item.ok && item.mirror);
+      const isWindowsDownloadFlow = !updateState.can_auto_update && updateState.can_download && /Windows/i.test(navigator.userAgent);
+      let pendingWindow = null;
       try {
         if (btn) {
           btn.disabled = true;
           btn.textContent = '更新中...';
         }
+        if (isWindowsDownloadFlow) {
+          pendingWindow = window.open('', '_blank');
+        }
         const resp = await fetch('/api/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
+          body: JSON.stringify({
+            preferred_mirror: bestGithubResult ? bestGithubResult.mirror : '',
+            preferred_speed_mbps: bestGithubResult && bestGithubResult.download
+              ? bestGithubResult.download.speed_mbps || null
+              : null
+          })
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || '更新失败');
         clearUpdateStatus();
         showToast(data.message || '更新处理完成', 'ok');
         if (data.open_in_browser && data.download_url) {
-          window.open(data.download_url, '_blank');
+          if (pendingWindow && !pendingWindow.closed) {
+            pendingWindow.location.href = data.download_url;
+          } else {
+            window.open(data.download_url, '_blank');
+          }
           if (btn) btn.textContent = updateState.can_download ? `下载 ${updateState.latest_version}` : '查看更新';
         } else if (data.restart_required) {
+          if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
           if (btn) btn.textContent = '已更新';
         } else {
+          if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
           if (btn) btn.textContent = original;
         }
       } catch (e) {
+        if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
         showToast(`更新失败：${e.message || e}`, 'fail');
         if (btn) btn.textContent = original;
       } finally {
@@ -1671,11 +1768,11 @@
           </div>
           <div class="os-pane active" data-os-pane="unix">
             <div class="act-code">${esc(unixCode)}</div>
-            <button class="btn-copy" onclick="copyText(this.previousElementSibling.textContent, this)">${esc(unixCopyLabel)}</button>
+            <button class="btn-copy" type="button" data-copy-pane="unix">${esc(unixCopyLabel)}</button>
           </div>
           <div class="os-pane" data-os-pane="windows">
             <div class="act-code">${esc(windowsCode)}</div>
-            <button class="btn-copy" onclick="copyText(this.previousElementSibling.textContent, this)">${esc(windowsCopyLabel)}</button>
+            <button class="btn-copy" type="button" data-copy-pane="windows">${esc(windowsCopyLabel)}</button>
           </div>
         </div>
       `;
@@ -1693,6 +1790,13 @@
           panes.forEach(pane => pane.classList.toggle('active', pane.dataset.osPane === os));
         };
         tabs.forEach(tab => tab.addEventListener('click', () => setActive(tab.dataset.os)));
+        sw.querySelectorAll('.btn-copy[data-copy-pane]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const pane = btn.closest('.os-pane');
+            const codeEl = pane ? pane.querySelector('.act-code') : null;
+            copyText(codeEl ? codeEl.textContent : '', btn);
+          });
+        });
         setActive('unix');
       });
     }
@@ -2352,8 +2456,6 @@
         const uvPermBash = `echo 'export UV_INDEX_URL=${fastest.mirror}/simple' >> ~/.zshrc\necho 'export UV_INDEX_URL=${fastest.mirror}/simple' >> ~/.bashrc`;
         const uvPermPwsh = `if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force > $null }\nAdd-Content -Path $PROFILE -Value '$env:UV_INDEX_URL="${fastest.mirror}/simple"'`;
         const uvToml = `[tool.uv]\nindex-url = "${fastest.mirror}/simple"`;
-        const uvUnixCode = `# 临时（当前 shell）\n${uvTempBash}\n\n# 永久（写入 shell 配置）\n${uvPermBash}\n\n# 项目级（永久）\n${uvToml}`;
-        const uvWindowsCode = `# 临时（当前 PowerShell 会话）\n${uvTempPwsh}\n\n# 永久（写入 $PROFILE）\n${uvPermPwsh}\n\n# 项目级（永久）\n${uvToml}`;
         el.innerHTML = `
           <div class="action-panel">
             ${sourceNote}
@@ -2362,21 +2464,43 @@
               linux: '~/.config/pip/pip.conf',
               macos: '~/.config/pip/pip.conf',
               windows: '%APPDATA%\\pip\\pip.ini',
-              note: 'pip install -i 为临时；pip config set 为永久'
+              note: 'pip install -i 为临时；pip config set 写入全局配置'
             })}
-            <div class="act-code"># 临时（当前命令）\n${esc(pipTempCmd)}\n\n# 永久（写入 pip 配置）\n${esc(pipPermCmd)}</div>
+            <div class="act-code"># 临时（当前命令）\n${esc(pipTempCmd)}\n\n# 全局配置\n${esc(pipPermCmd)}</div>
             <button class="btn-copy" onclick="copyText(\`${pipTempCmd}\`, this)">复制临时 pip 命令</button>
-            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${pipPermCmd}\`, this)">复制永久 pip 命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${pipPermCmd}\`, this)">复制全局 pip 命令</button>
             <div class="action-section">
               <div class="act-title">配置 uv 使用最快镜像</div>
               ${renderPathHint({
                 project: 'pyproject.toml',
-                linux: '~/.zshrc 或 ~/.bashrc（永久）',
-                macos: '~/.zshrc（永久）',
-                windows: '$PROFILE（永久）',
+                linux: '~/.zshrc 或 ~/.bashrc',
+                macos: '~/.zshrc',
+                windows: '$PROFILE',
                 note: '点击 Linux/macOS 或 Windows 标签查看对应命令'
               })}
-              ${renderSystemCommandTabs(uvUnixCode, uvWindowsCode, '复制 Linux/macOS uv 配置', '复制 Windows uv 配置')}
+              <div class="os-switch">
+                <div class="os-tabs">
+                  <button class="os-tab active" type="button" data-os="unix">Linux/macOS</button>
+                  <button class="os-tab" type="button" data-os="windows">Windows</button>
+                </div>
+                <div class="os-pane active" data-os-pane="unix">
+                  <div class="act-code"># 临时（当前 shell）\n${esc(uvTempBash)}</div>
+                  <button class="btn-copy" onclick="copyText(\`${uvTempBash}\`, this)">复制临时 uv 命令</button>
+                  <div class="act-code"># 写入 shell 配置\n${esc(uvPermBash)}</div>
+                  <button class="btn-copy" onclick="copyText(\`${uvPermBash}\`, this)">复制 shell 配置命令</button>
+                </div>
+                <div class="os-pane" data-os-pane="windows">
+                  <div class="act-code"># 临时（当前 PowerShell 会话）\n${esc(uvTempPwsh)}</div>
+                  <button class="btn-copy" onclick="copyText(\`${uvTempPwsh}\`, this)">复制临时 uv 命令</button>
+                  <div class="act-code"># 写入 $PROFILE\n${esc(uvPermPwsh)}</div>
+                  <button class="btn-copy" onclick="copyText(\`${uvPermPwsh}\`, this)">复制 PowerShell 配置命令</button>
+                </div>
+              </div>
+              <div class="action-section">
+                <div class="act-title">pyproject.toml 片段</div>
+                <div class="act-code">${esc(uvToml)}</div>
+                <button class="btn-copy" onclick="copyText(\`${uvToml}\`, this)">复制 pyproject.toml 片段</button>
+              </div>
             </div>
           </div>
         `;
@@ -2396,12 +2520,12 @@
               macos: '~/.npmrc',
               windows: '%USERPROFILE%\\.npmrc',
               project: '.npmrc',
-              note: 'npm --registry 为临时；npm config set 为永久'
+              note: 'npm --registry 为临时；npm config set 可写入全局或项目配置'
             })}
-            <div class="act-code"># 临时（当前命令）\n${esc(tempCmd)}\n\n# 永久（全局）\n${esc(permGlobalCmd)}\n\n# 永久（项目级）\n${esc(permProjectCmd)}</div>
+            <div class="act-code"># 临时（当前命令）\n${esc(tempCmd)}\n\n# 全局配置\n${esc(permGlobalCmd)}\n\n# 项目配置\n${esc(permProjectCmd)}</div>
             <button class="btn-copy" onclick="copyText(\`${tempCmd}\`, this)">复制临时 npm 命令</button>
-            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permGlobalCmd}\`, this)">复制永久全局命令</button>
-            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permProjectCmd}\`, this)">复制永久项目命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permGlobalCmd}\`, this)">复制全局命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permProjectCmd}\`, this)">复制项目命令</button>
           </div>
         `;
       }
@@ -2420,10 +2544,10 @@
               linux: '~/.m2/settings.xml',
               macos: '~/.m2/settings.xml',
               windows: '%USERPROFILE%\\.m2\\settings.xml',
-              note: '该方式为永久配置（写入文件）'
+              note: '写入文件'
             })}
             <div class="act-code">${esc(settingsXml)}</div>
-            <button class="btn-copy" onclick="copyText(\`${settingsXml}\`, this)">复制永久 settings.xml</button>
+            <button class="btn-copy" onclick="copyText(\`${settingsXml}\`, this)">复制 settings.xml</button>
             <div class="action-section">
               <div class="act-title">Gradle (Groovy DSL)</div>
               ${renderPathHint({
@@ -2431,10 +2555,10 @@
                 macos: '~/.gradle/init.gradle',
                 windows: '%USERPROFILE%\\.gradle\\init.gradle',
                 project: 'build.gradle',
-                note: '该方式为永久配置（写入文件）'
+                note: '写入文件'
               })}
               <div class="act-code">${esc(gradleGroovy)}</div>
-              <button class="btn-copy" onclick="copyText(\`${gradleGroovy}\`, this)">复制永久 Groovy 配置</button>
+              <button class="btn-copy" onclick="copyText(\`${gradleGroovy}\`, this)">复制 Groovy 配置</button>
             </div>
             <div class="action-section">
               <div class="act-title">Gradle (Kotlin DSL)</div>
@@ -2443,10 +2567,10 @@
                 macos: '~/.gradle/init.gradle.kts',
                 windows: '%USERPROFILE%\\.gradle\\init.gradle.kts',
                 project: 'build.gradle.kts',
-                note: '该方式为永久配置（写入文件）'
+                note: '写入文件'
               })}
               <div class="act-code">${esc(gradleKts)}</div>
-              <button class="btn-copy" onclick="copyText(\`${gradleKts}\`, this)">复制永久 Kotlin 配置</button>
+              <button class="btn-copy" onclick="copyText(\`${gradleKts}\`, this)">复制 Kotlin 配置</button>
             </div>
           </div>
         `;
@@ -2457,8 +2581,6 @@
         const tempBashCmd = `export GOPROXY=${fastest.mirror},direct`;
         const tempPwshCmd = `$env:GOPROXY='${fastest.mirror},direct'`;
         const permCmd = `go env -w GOPROXY=${fastest.mirror},direct`;
-        const unixCode = `# 临时（当前 shell）\n${tempBashCmd}\n\n# 永久（写入 go env）\n${permCmd}`;
-        const windowsCode = `# 临时（当前 PowerShell 会话）\n${tempPwshCmd}\n\n# 永久（写入 go env）\n${permCmd}`;
         el.innerHTML = `
           <div class="action-panel">
             ${sourceNote}
@@ -2467,9 +2589,26 @@
               linux: '~/.config/go/env',
               macos: '~/.config/go/env',
               windows: '%APPDATA%\\go\\env',
-              note: '点击 Linux/macOS 或 Windows 标签查看对应命令；go env -w 为永久'
+              note: '点击 Linux/macOS 或 Windows 标签查看对应命令；go env -w 会写入 go env'
             })}
-            ${renderSystemCommandTabs(unixCode, windowsCode, '复制 Linux/macOS Go 配置', '复制 Windows Go 配置')}
+            <div class="os-switch">
+              <div class="os-tabs">
+                <button class="os-tab active" type="button" data-os="unix">Linux/macOS</button>
+                <button class="os-tab" type="button" data-os="windows">Windows</button>
+              </div>
+              <div class="os-pane active" data-os-pane="unix">
+                <div class="act-code"># 临时（当前 shell）\n${esc(tempBashCmd)}</div>
+                <button class="btn-copy" onclick="copyText(\`${tempBashCmd}\`, this)">复制临时 Go 命令</button>
+                <div class="act-code"># 写入 go env\n${esc(permCmd)}</div>
+                <button class="btn-copy" onclick="copyText(\`${permCmd}\`, this)">复制 go env 命令</button>
+              </div>
+              <div class="os-pane" data-os-pane="windows">
+                <div class="act-code"># 临时（当前 PowerShell 会话）\n${esc(tempPwshCmd)}</div>
+                <button class="btn-copy" onclick="copyText(\`${tempPwshCmd}\`, this)">复制临时 Go 命令</button>
+                <div class="act-code"># 写入 go env\n${esc(permCmd)}</div>
+                <button class="btn-copy" onclick="copyText(\`${permCmd}\`, this)">复制 go env 命令</button>
+              </div>
+            </div>
           </div>
         `;
       }
@@ -2486,10 +2625,10 @@
               linux: '~/.cargo/config.toml',
               macos: '~/.cargo/config.toml',
               windows: '%USERPROFILE%\\.cargo\\config.toml',
-              note: '该方式为永久配置（写入文件）'
+              note: '写入文件'
             })}
             <div class="act-code">${esc(cargoToml)}</div>
-            <button class="btn-copy" onclick="copyText(\`${cargoToml}\`, this)">复制永久 .cargo/config.toml</button>
+            <button class="btn-copy" onclick="copyText(\`${cargoToml}\`, this)">复制 .cargo/config.toml</button>
           </div>
         `;
       }
@@ -2508,15 +2647,15 @@
               linux: '~/.nuget/NuGet/NuGet.Config',
               macos: '~/.nuget/NuGet/NuGet.Config',
               windows: '%AppData%\\NuGet\\NuGet.Config',
-              note: 'dotnet restore --source 为临时；dotnet nuget add source / NuGet.Config 为永久'
+              note: 'dotnet restore --source 为临时；dotnet nuget add source / NuGet.Config 用于长期配置'
             })}
-            <div class="act-code"># 临时（当前 restore）\n${esc(tempCmd)}\n\n# 永久（写入 NuGet 源）\n${esc(permCmd)}</div>
+            <div class="act-code"># 临时（当前 restore）\n${esc(tempCmd)}\n\n# 添加源\n${esc(permCmd)}</div>
             <button class="btn-copy" onclick="copyText(\`${tempCmd}\`, this)">复制临时 restore 命令</button>
-            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permCmd}\`, this)">复制永久 dotnet 命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permCmd}\`, this)">复制 dotnet 源命令</button>
             <div class="action-section">
-              <div class="act-title">NuGet.Config 片段（永久）</div>
+              <div class="act-title">NuGet.Config 片段（文件方式）</div>
               <div class="act-code">${esc(cfg)}</div>
-              <button class="btn-copy" onclick="copyText(\`${cfg}\`, this)">复制永久 NuGet.Config XML</button>
+              <button class="btn-copy" onclick="copyText(\`${cfg}\`, this)">复制 NuGet.Config XML</button>
             </div>
           </div>
         `;
@@ -2537,15 +2676,15 @@
               linux: '~/.condarc',
               macos: '~/.condarc',
               windows: '%USERPROFILE%\\.condarc',
-              note: 'conda install -c 为临时；conda config / .condarc 为永久'
+              note: 'conda install -c 为临时；conda config / .condarc 用于长期配置'
             })}
-            <div class="act-code"># 临时（当前安装命令）\n${esc(tempCmd)}\n\n# 永久（写入 conda 配置）\n${esc(permCmdMain)}\n${esc(permCmdR)}</div>
+            <div class="act-code"># 临时（当前安装命令）\n${esc(tempCmd)}\n\n# 写入 conda 配置\n${esc(permCmdMain)}\n${esc(permCmdR)}</div>
             <button class="btn-copy" onclick="copyText(\`${tempCmd}\`, this)">复制临时 conda 命令</button>
-            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permCmdMain}\n${permCmdR}\`, this)">复制永久 conda 命令</button>
+            <button class="btn-copy" style="margin-left:6px" onclick="copyText(\`${permCmdMain}\n${permCmdR}\`, this)">复制 conda 配置命令</button>
             <div class="action-section">
-              <div class="act-title">.condarc 片段（永久）</div>
+              <div class="act-title">.condarc 片段（文件方式）</div>
               <div class="act-code">${esc(condarc)}</div>
-              <button class="btn-copy" onclick="copyText(\`${condarc}\`, this)">复制永久 .condarc</button>
+              <button class="btn-copy" onclick="copyText(\`${condarc}\`, this)">复制 .condarc</button>
             </div>
           </div>
         `;
@@ -2558,8 +2697,6 @@
         const tempPwshCmd = `$env:HOMEBREW_BOTTLE_DOMAIN='${base}'\n$env:HOMEBREW_API_DOMAIN='${base}'`;
         const permBashCmd = `echo 'export HOMEBREW_BOTTLE_DOMAIN=${base}' >> ~/.zshrc\necho 'export HOMEBREW_API_DOMAIN=${base}' >> ~/.zshrc\necho 'export HOMEBREW_BOTTLE_DOMAIN=${base}' >> ~/.bashrc\necho 'export HOMEBREW_API_DOMAIN=${base}' >> ~/.bashrc`;
         const permPwshCmd = `if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force > $null }\nAdd-Content -Path $PROFILE -Value '$env:HOMEBREW_BOTTLE_DOMAIN="${base}"'\nAdd-Content -Path $PROFILE -Value '$env:HOMEBREW_API_DOMAIN="${base}"'`;
-        const unixCode = `# 临时（当前 shell）\n${tempBashCmd}\n\n# 永久（写入 shell 配置）\n${permBashCmd}`;
-        const windowsCode = `# 临时（当前 PowerShell 会话）\n${tempPwshCmd}\n\n# 永久（写入 $PROFILE）\n${permPwshCmd}`;
         el.innerHTML = `
           <div class="action-panel">
             ${sourceNote}
@@ -2570,7 +2707,24 @@
               windows: '$PROFILE',
               note: '点击 Linux/macOS 或 Windows 标签查看对应命令'
             })}
-            ${renderSystemCommandTabs(unixCode, windowsCode, '复制 Linux/macOS Homebrew 配置', '复制 Windows Homebrew 配置')}
+            <div class="os-switch">
+              <div class="os-tabs">
+                <button class="os-tab active" type="button" data-os="unix">Linux/macOS</button>
+                <button class="os-tab" type="button" data-os="windows">Windows</button>
+              </div>
+              <div class="os-pane active" data-os-pane="unix">
+                <div class="act-code"># 临时（当前 shell）\n${esc(tempBashCmd)}</div>
+                <button class="btn-copy" onclick="copyText(\`${tempBashCmd}\`, this)">复制临时 Homebrew 命令</button>
+                <div class="act-code"># 写入 shell 配置\n${esc(permBashCmd)}</div>
+                <button class="btn-copy" onclick="copyText(\`${permBashCmd}\`, this)">复制 shell 配置命令</button>
+              </div>
+              <div class="os-pane" data-os-pane="windows">
+                <div class="act-code"># 临时（当前 PowerShell 会话）\n${esc(tempPwshCmd)}</div>
+                <button class="btn-copy" onclick="copyText(\`${tempPwshCmd}\`, this)">复制临时 Homebrew 命令</button>
+                <div class="act-code"># 写入 $PROFILE\n${esc(permPwshCmd)}</div>
+                <button class="btn-copy" onclick="copyText(\`${permPwshCmd}\`, this)">复制 PowerShell 配置命令</button>
+              </div>
+            </div>
           </div>
         `;
       }
@@ -2588,10 +2742,10 @@
             ${renderPathHint({
               linux: '/var/lib/flatpak/repo/config（系统级）',
               project: '~/.local/share/flatpak/repo/config（用户级）',
-              note: 'Flatpak 主要用于 Linux；该方式为永久配置'
+              note: 'Flatpak 主要用于 Linux'
             })}
             <div class="act-code">${esc(addCmd)}\n${esc(modifyCmd)}</div>
-            <button class="btn-copy" onclick="copyText(\`${addCmd}\n${modifyCmd}\`, this)">复制永久配置命令</button>
+            <button class="btn-copy" onclick="copyText(\`${addCmd}\n${modifyCmd}\`, this)">复制配置命令</button>
           </div>
         `;
       }
@@ -2599,20 +2753,169 @@
       else if (kind === 'apt') {
         const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
-        const line = `deb ${base}/ubuntu noble main restricted universe multiverse`;
-        const cmd = `sudo sed -i 's|http://archive.ubuntu.com/ubuntu|${base}/ubuntu|g' /etc/apt/sources.list && sudo apt update`;
+        const aptReleases = [
+          { value: 'ubuntu:noble', label: 'Ubuntu 24.04 (noble)', family: 'ubuntu', codename: 'noble' },
+          { value: 'ubuntu:jammy', label: 'Ubuntu 22.04 (jammy)', family: 'ubuntu', codename: 'jammy' },
+          { value: 'ubuntu:oracular', label: 'Ubuntu 24.10 (oracular)', family: 'ubuntu', codename: 'oracular' },
+          { value: 'debian:bookworm', label: 'Debian 12 (bookworm)', family: 'debian', codename: 'bookworm' },
+          { value: 'debian:trixie', label: 'Debian 13 (trixie)', family: 'debian', codename: 'trixie' },
+        ];
         el.innerHTML = `
           <div class="action-panel">
             ${sourceNote}
             <div class="act-title">配置 APT 使用最快镜像</div>
             ${renderPathHint({
               linux: '/etc/apt/sources.list 或 /etc/apt/sources.list.d/*.list',
-              note: 'APT 仅适用于 Debian/Ubuntu 系 Linux；该方式为永久配置'
+              note: 'APT 仅适用于 Debian/Ubuntu 系 Linux'
             })}
-            <div class="act-code">${esc(line)}\n\n${esc(cmd)}</div>
-            <button class="btn-copy" onclick="copyText(\`${line}\n\n${cmd}\`, this)">复制永久配置与命令</button>
+            <div class="os-switch">
+              <div class="os-tabs">
+                <button class="os-tab active" type="button" data-apt-format="classic">传统格式</button>
+                <button class="os-tab" type="button" data-apt-format="deb822">DEB822</button>
+              </div>
+            </div>
+            <div class="act-row">
+              <div style="min-width:180px;flex:1">
+                <label class="act-label" for="apt-release-select">发行版版本</label>
+                <select id="apt-release-select">
+                  ${aptReleases.map(item => `<option value="${esc(item.value)}"${item.value === 'ubuntu:noble' ? ' selected' : ''}>${esc(item.label)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="act-option-grid">
+              <label class="act-toggle-card">
+                <span class="act-toggle-title">启用源码源</span>
+                <span class="switch">
+                  <input type="checkbox" id="apt-enable-src" />
+                  <span class="switch-slider"></span>
+                </span>
+              </label>
+              <label class="act-toggle-card">
+                <span class="act-toggle-title">启用 proposed</span>
+                <span class="switch">
+                  <input type="checkbox" id="apt-enable-proposed" />
+                  <span class="switch-slider"></span>
+                </span>
+              </label>
+              <label class="act-toggle-card">
+                <span class="act-toggle-title">安全更新使用镜像</span>
+                <span class="switch">
+                  <input type="checkbox" id="apt-mirror-security" />
+                  <span class="switch-slider"></span>
+                </span>
+              </label>
+            </div>
+            <div class="act-code" id="apt-sources-list"></div>
+            <div class="act-code" id="apt-update-command"></div>
+            <button class="btn-copy" id="apt-copy-sources-btn">复制配置片段</button>
+            <button class="btn-copy" id="apt-copy-update-btn" style="margin-left:6px">复制更新命令</button>
           </div>
         `;
+        const aptSelect = document.getElementById('apt-release-select');
+        const aptFormatTabs = Array.from(el.querySelectorAll('[data-apt-format]'));
+        const aptSrcToggle = document.getElementById('apt-enable-src');
+        const aptProposedToggle = document.getElementById('apt-enable-proposed');
+        const aptMirrorSecurityToggle = document.getElementById('apt-mirror-security');
+        const aptSourcesEl = document.getElementById('apt-sources-list');
+        const aptUpdateEl = document.getElementById('apt-update-command');
+        const aptCopyBtn = document.getElementById('apt-copy-sources-btn');
+        const aptCopyUpdateBtn = document.getElementById('apt-copy-update-btn');
+        let aptFormat = 'classic';
+        const commentLine = (line, enabled) => enabled ? line : `# ${line}`;
+        const renderAptSources = () => {
+          const selected = aptReleases.find(item => item.value === aptSelect.value) || aptReleases[0];
+          const family = selected.family;
+          const codename = selected.codename;
+          const enableSrc = aptSrcToggle.checked;
+          const enableProposed = aptProposedToggle.checked;
+          const mirrorSecurity = aptMirrorSecurityToggle.checked;
+          const updatePath = aptFormat === 'deb822'
+            ? `/etc/apt/sources.list.d/${family}.sources`
+            : '/etc/apt/sources.list';
+          const updateCmd = `sudo cp ${updatePath} ${updatePath}.bak && sudo editor ${updatePath} && sudo apt update`;
+          let sourcesList = '';
+          if (aptFormat === 'classic' && family === 'ubuntu') {
+            const securityBase = mirrorSecurity ? `${base}/ubuntu/` : 'http://security.ubuntu.com/ubuntu/';
+            sourcesList = `# 默认注释了源码镜像以提高 apt update 速度，如有需要可自行取消注释
+deb ${base}/ubuntu/ ${codename} main restricted universe multiverse
+${commentLine(`deb-src ${base}/ubuntu/ ${codename} main restricted universe multiverse`, enableSrc)}
+deb ${base}/ubuntu/ ${codename}-updates main restricted universe multiverse
+${commentLine(`deb-src ${base}/ubuntu/ ${codename}-updates main restricted universe multiverse`, enableSrc)}
+deb ${base}/ubuntu/ ${codename}-backports main restricted universe multiverse
+${commentLine(`deb-src ${base}/ubuntu/ ${codename}-backports main restricted universe multiverse`, enableSrc)}
+
+# 以下安全更新软件源${mirrorSecurity ? '使用镜像' : '为官方源配置'}
+deb ${securityBase} ${codename}-security main restricted universe multiverse
+${commentLine(`deb-src ${securityBase} ${codename}-security main restricted universe multiverse`, enableSrc)}
+
+# 预发布软件源，不建议启用
+${commentLine(`deb ${base}/ubuntu/ ${codename}-proposed main restricted universe multiverse`, enableProposed)}
+${commentLine(`deb-src ${base}/ubuntu/ ${codename}-proposed main restricted universe multiverse`, enableSrc && enableProposed)}`;
+          } else if (aptFormat === 'classic') {
+            const securityBase = mirrorSecurity ? `${base}/debian-security/` : 'http://security.debian.org/debian-security/';
+            sourcesList = `# 默认注释了源码镜像以提高 apt update 速度，如有需要可自行取消注释
+deb ${base}/debian/ ${codename} main contrib non-free non-free-firmware
+${commentLine(`deb-src ${base}/debian/ ${codename} main contrib non-free non-free-firmware`, enableSrc)}
+deb ${base}/debian/ ${codename}-updates main contrib non-free non-free-firmware
+${commentLine(`deb-src ${base}/debian/ ${codename}-updates main contrib non-free non-free-firmware`, enableSrc)}
+deb ${base}/debian/ ${codename}-backports main contrib non-free non-free-firmware
+${commentLine(`deb-src ${base}/debian/ ${codename}-backports main contrib non-free non-free-firmware`, enableSrc)}
+
+# 以下安全更新软件源${mirrorSecurity ? '使用镜像' : '为官方源配置'}
+deb ${securityBase} ${codename}-security main contrib non-free non-free-firmware
+${commentLine(`deb-src ${securityBase} ${codename}-security main contrib non-free non-free-firmware`, enableSrc)}`;
+          } else if (family === 'ubuntu') {
+            const securityUri = mirrorSecurity ? `${base}/ubuntu/` : 'http://security.ubuntu.com/ubuntu/';
+            const types = enableSrc ? 'deb deb-src' : 'deb';
+            sourcesList = `Types: ${types}
+URIs: ${base}/ubuntu/
+Suites: ${codename} ${codename}-updates ${codename}-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: ${types}
+URIs: ${securityUri}
+Suites: ${codename}-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+${enableProposed ? `Types: ${types}
+URIs: ${base}/ubuntu/
+Suites: ${codename}-proposed
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg` : '# 预发布软件源未启用'}`;
+          } else {
+            const securityUri = mirrorSecurity ? `${base}/debian-security/` : 'http://security.debian.org/debian-security/';
+            const types = enableSrc ? 'deb deb-src' : 'deb';
+            sourcesList = `Types: ${types}
+URIs: ${base}/debian/
+Suites: ${codename} ${codename}-updates ${codename}-backports
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: ${types}
+URIs: ${securityUri}
+Suites: ${codename}-security
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
+          }
+          aptSourcesEl.textContent = sourcesList;
+          aptUpdateEl.textContent = updateCmd;
+          aptCopyBtn.onclick = () => copyText(sourcesList, aptCopyBtn);
+          aptCopyUpdateBtn.onclick = () => copyText(updateCmd, aptCopyUpdateBtn);
+        };
+        aptFormatTabs.forEach((tab) => {
+          tab.addEventListener('click', () => {
+            aptFormat = tab.dataset.aptFormat || 'classic';
+            aptFormatTabs.forEach((item) => item.classList.toggle('active', item === tab));
+            renderAptSources();
+          });
+        });
+        aptSelect.addEventListener('change', renderAptSources);
+        aptSrcToggle.addEventListener('change', renderAptSources);
+        aptProposedToggle.addEventListener('change', renderAptSources);
+        aptMirrorSecurityToggle.addEventListener('change', renderAptSources);
+        renderAptSources();
       }
 
       else if (kind === 'yum') {
@@ -2625,10 +2928,10 @@
             <div class="act-title">配置 YUM / DNF 使用最快镜像</div>
             ${renderPathHint({
               linux: '/etc/yum.repos.d/*.repo',
-              note: 'YUM/DNF 仅适用于 RHEL/CentOS/Fedora 系 Linux；该方式为永久配置'
+              note: 'YUM/DNF 仅适用于 RHEL/CentOS/Fedora 系 Linux'
             })}
             <div class="act-code">${esc(repoCfg)}</div>
-            <button class="btn-copy" onclick="copyText(\`${repoCfg}\`, this)">复制永久 .repo 片段</button>
+            <button class="btn-copy" onclick="copyText(\`${repoCfg}\`, this)">复制 .repo 片段</button>
           </div>
         `;
       }
@@ -2644,10 +2947,12 @@
             <div class="act-title">配置 Alpine APK 使用最快镜像</div>
             ${renderPathHint({
               linux: '/etc/apk/repositories',
-              note: 'APK 仅适用于 Alpine Linux；该方式为永久配置'
+              note: 'APK 仅适用于 Alpine Linux'
             })}
-            <div class="act-code">${esc(repos)}\n\n${esc(cmd)}</div>
-            <button class="btn-copy" onclick="copyText(\`${repos}\n\n${cmd}\`, this)">复制永久配置与命令</button>
+            <div class="act-code">${esc(repos)}</div>
+            <button class="btn-copy" onclick="copyText(\`${repos}\`, this)">复制 repositories 片段</button>
+            <div class="act-code">${esc(cmd)}</div>
+            <button class="btn-copy" onclick="copyText(\`${cmd}\`, this)">复制更新命令</button>
           </div>
         `;
       }

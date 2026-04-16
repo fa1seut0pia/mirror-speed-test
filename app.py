@@ -326,19 +326,25 @@ def _download_to_path(url, path, timeout=30):
     return path
 
 
-def prepare_update_download():
+def prepare_update_download(preferred_mirror="", preferred_speed_mbps=None):
     update = build_update_status()
     if not update.get("has_update"):
         return {"ok": True, "message": "当前已是最新版本", "status": update, "download_url": ""}
     if not update.get("asset_url"):
         raise MirrorTestError("当前平台未匹配到可下载的构建产物")
     download_url = update["asset_url"]
-    best_mirror = ""
-    best_speed = None
+    best_mirror = str(preferred_mirror or "").strip().rstrip("/")
+    best_speed = preferred_speed_mbps
 
     github_cfg = get_runtime_config_snapshot().get("github", {})
     mirrors = dedupe_mirrors(github_cfg.get("mirrors", []) or [])
-    if mirrors:
+    if best_mirror and best_mirror in mirrors:
+        download_url = render_mirror_target(
+            best_mirror,
+            update["asset_url"],
+            allow_full_url_prefix=True,
+        )
+    elif mirrors:
         try:
             test_payload = run_test_batch(
                 kind="github",
@@ -1967,7 +1973,10 @@ class AppHandler(BaseHTTPRequestHandler):
 
         if self.path == "/api/update":
             try:
-                response_payload = prepare_update_download()
+                response_payload = prepare_update_download(
+                    preferred_mirror=payload.get("preferred_mirror"),
+                    preferred_speed_mbps=payload.get("preferred_speed_mbps"),
+                )
             except Exception as error:
                 log_error(f"{client} POST /api/update failed: {error}")
                 self._send_json({"error": str(error)}, status=400)
