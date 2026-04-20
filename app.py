@@ -1571,9 +1571,10 @@ DEFAULT_MIRROR_CONFIG = {
         "label": "Docker 镜像源",
         "icon": "\U0001f433",
         "icon_url": "https://cdn.simpleicons.org/docker/2496ED",
-        "tip": "默认目标：homebrew/brew:latest，ghcr.nju.edu.cn（GHCR）节点下部分 Docker Hub 镜像可能 404。",
+        "tip": "默认目标：homebrew/brew:latest。部分镜像源支持多目标仓库直拉，如 dockerproxy.cool、docker-pull.ygxz.in、docker.1ms.run；ghcr.nju.edu.cn 仅适用于 GHCR。",
         "mirrors": [
             "https://registry-1.docker.io",
+            "https://dockerproxy.cool",
             "https://2a6bf1988cb6428c877f723ec7530dbc.mirror.swr.myhuaweicloud.com",
             "https://docker-pull.ygxz.in",
             "https://docker.etcd.fun",
@@ -1837,6 +1838,56 @@ def normalize_test_request(kind=None, mirrors=None, target=None, sample_mb=None,
     }
 
 
+def summarize_mirror_list(mirrors, limit=3):
+    items = [str(item).strip() for item in (mirrors or []) if str(item).strip()]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return f"mirror={items[0]}"
+    visible = ", ".join(items[:limit])
+    if len(items) > limit:
+        visible += f", ...(+{len(items) - limit})"
+    return f"mirrors=[{visible}]"
+
+
+def build_docker_pull_display(mirror, target):
+    mirror_text = re.sub(r"^https?://", "", str(mirror or "").strip()).rstrip("/")
+    target_text = str(target or "").strip()
+    if not mirror_text or not target_text:
+        return ""
+    return f"docker pull {mirror_text}/{target_text}"
+
+
+def summarize_request_subject(kind, mirrors, target):
+    items = [str(item).strip() for item in (mirrors or []) if str(item).strip()]
+    if kind == "docker" and len(items) == 1:
+        display = build_docker_pull_display(items[0], target)
+        if display:
+            return f'subject="{display}"'
+    return summarize_mirror_list(items)
+
+
+def resolve_result_log_subject(result):
+    if not isinstance(result, dict):
+        return ""
+    kind = str(result.get("kind") or "").strip().lower()
+    if kind == "docker":
+        display = build_docker_pull_display(result.get("mirror"), result.get("target"))
+        if display:
+            return display
+    subject_detail = str((result.get("subject") or {}).get("detail") or "").strip()
+    if subject_detail:
+        return subject_detail
+    download = result.get("download") or {}
+    download_url = str(download.get("url") or "").strip()
+    if download_url:
+        return download_url
+    redirect_url = str(download.get("location") or "").strip()
+    if redirect_url:
+        return redirect_url
+    return str(result.get("mirror") or "").strip()
+
+
 def run_test_batch(kind, mirrors, target, sample_mb, progress_callback=None, probe_only=False):
     started = time.perf_counter()
     sample_bytes = sample_mb * 1024 * 1024
@@ -1947,8 +1998,13 @@ class AppHandler(BaseHTTPRequestHandler):
                     sample_mb=payload.get("sample_mb"),
                     probe_only=payload.get("probe_only"),
                 )
+                mirror_text = summarize_request_subject(
+                    request["kind"],
+                    request["mirrors"],
+                    request["target"],
+                )
                 log_info(
-                    f"{client} POST /api/test start kind={request['kind']} mirrors={len(request['mirrors'])} "
+                    f"{client} POST /api/test start kind={request['kind']} {mirror_text} "
                     f"sample_mb={request['sample_mb']} target={request['target']} probe_only={request['probe_only']}"
                 )
                 response_payload = run_test_batch(
@@ -1964,9 +2020,12 @@ class AppHandler(BaseHTTPRequestHandler):
                 return
             ok_count = sum(1 for item in response_payload.get("results", []) if item.get("ok"))
             total_count = len(response_payload.get("results", []))
+            log_result = (response_payload.get("results") or [{}])[0]
+            result_subject = resolve_result_log_subject(log_result)
+            result_text = f' subject="{result_subject}"' if result_subject else ""
             log_info(
                 f"{client} POST /api/test done kind={request['kind']} ok={ok_count}/{total_count} "
-                f"elapsed={response_payload.get('elapsed_s', '?')}s"
+                f"elapsed={response_payload.get('elapsed_s', '?')}s{result_text}"
             )
             self._send_json(response_payload)
             return

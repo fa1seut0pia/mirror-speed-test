@@ -2083,6 +2083,16 @@
       logEl.scrollTop = logEl.scrollHeight;
     }
 
+    function getProgressLogAddress(result) {
+      const subjectDetail = String(result?.subject?.detail || '').trim();
+      if (/^https?:\/\//i.test(subjectDetail)) return subjectDetail;
+      const downloadUrl = String(result?.download?.url || '').trim();
+      if (/^https?:\/\//i.test(downloadUrl)) return downloadUrl;
+      const redirectUrl = String(result?.download?.location || '').trim();
+      if (/^https?:\/\//i.test(redirectUrl)) return redirectUrl;
+      return String(result?.mirror || '').trim();
+    }
+
     /* ── init ── */
     function initCards(data) {
       defaults = JSON.parse(JSON.stringify(data));
@@ -2310,6 +2320,121 @@
       return m + '/v3/index.json';
     }
 
+    const DOCKER_MIRROR_RULES = {
+      'dockerproxy.cool': {
+        daemon: false,
+        sources: {
+          dockerhub: { mode: 'self' },
+          ghcr: { mode: 'self' },
+          quay: { mode: 'self' },
+          k8s: { mode: 'self' },
+        }
+      },
+      'docker-pull.ygxz.in': {
+        daemon: true,
+        sources: {
+          dockerhub: { mode: 'self' },
+          ghcr: { mode: 'host', host: 'ghcr-pull.ygxz.in', stripRegistry: 'ghcr.io' },
+          quay: { mode: 'host', host: 'quay-pull.ygxz.in', stripRegistry: 'quay.io' },
+          k8s: { mode: 'host', host: 'k8s-gcr-pull.ygxz.in', stripRegistry: 'registry.k8s.io' },
+        }
+      },
+      'docker.1ms.run': {
+        daemon: true,
+        sources: {
+          dockerhub: { mode: 'self' },
+          ghcr: { mode: 'host', host: 'ghcr.1ms.run', stripRegistry: 'ghcr.io' },
+          quay: { mode: 'host', host: 'quay.1ms.run', stripRegistry: 'quay.io' },
+          k8s: { mode: 'host', host: 'k8s.1ms.run', stripRegistry: 'registry.k8s.io' },
+        }
+      },
+      'ghcr.nju.edu.cn': {
+        daemon: false,
+        sources: {
+          ghcr: { mode: 'self', stripRegistry: 'ghcr.io' },
+        }
+      }
+    };
+
+    function normalizeDockerMirrorHost(mirror) {
+      return String(mirror || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    }
+
+    function getDockerMirrorRule(mirror) {
+      const host = normalizeDockerMirrorHost(mirror).toLowerCase();
+      return DOCKER_MIRROR_RULES[host] || null;
+    }
+
+    function stripDockerRegistryPrefix(imageRef, registryPrefix) {
+      const text = String(imageRef || '').trim().replace(/^\/+/, '');
+      const prefix = `${registryPrefix}/`;
+      return text.toLowerCase().startsWith(prefix.toLowerCase()) ? text.slice(prefix.length) : text;
+    }
+
+    function normalizeDockerHubImageRef(imageRef) {
+      let text = String(imageRef || '').trim().replace(/^\/+/, '');
+      if (!text) return '';
+      ['docker.io/', 'index.docker.io/', 'registry-1.docker.io/'].forEach((prefix) => {
+        if (text.toLowerCase().startsWith(prefix)) {
+          text = text.slice(prefix.length);
+        }
+      });
+      let digest = '';
+      const digestIndex = text.indexOf('@');
+      if (digestIndex >= 0) {
+        digest = text.slice(digestIndex);
+        text = text.slice(0, digestIndex);
+      }
+      let tag = '';
+      const lastSlash = text.lastIndexOf('/');
+      const tagIndex = text.lastIndexOf(':');
+      if (tagIndex > lastSlash) {
+        tag = text.slice(tagIndex);
+        text = text.slice(0, tagIndex);
+      }
+      if (!text.includes('/')) text = `library/${text}`;
+      return `${text}${tag}${digest}`;
+    }
+
+    function buildDockerImageRef(sourceType, imageInput) {
+      const raw = String(imageInput || '').trim().replace(/^\/+/, '');
+      if (!raw) return '';
+      if (sourceType === 'dockerhub') return normalizeDockerHubImageRef(raw);
+      if (sourceType === 'ghcr') return raw.toLowerCase().startsWith('ghcr.io/') ? raw : `ghcr.io/${raw}`;
+      if (sourceType === 'quay') return raw.toLowerCase().startsWith('quay.io/') ? raw : `quay.io/${raw}`;
+      if (sourceType === 'k8s') return raw.toLowerCase().startsWith('registry.k8s.io/') ? raw : `registry.k8s.io/${raw}`;
+      return raw;
+    }
+
+    function buildDockerPullCommand(mirror, sourceType, imageRef) {
+      const host = normalizeDockerMirrorHost(mirror);
+      if (!host || !imageRef) return '';
+      const rule = getDockerMirrorRule(mirror);
+      if (!rule) {
+        if (sourceType !== 'dockerhub') return '';
+        return `docker pull ${host}/${imageRef}`;
+      }
+      const sourceRule = rule.sources?.[sourceType];
+      if (!sourceRule) return '';
+      const outputHost = sourceRule.host || host;
+      const outputRef = sourceRule.stripRegistry
+        ? stripDockerRegistryPrefix(imageRef, sourceRule.stripRegistry)
+        : imageRef;
+      if (!outputHost || !outputRef) return '';
+      return `docker pull ${outputHost}/${outputRef}`;
+    }
+
+    function dockerMirrorSupportsSource(mirror, sourceType) {
+      const rule = getDockerMirrorRule(mirror);
+      if (!rule) return sourceType === 'dockerhub';
+      return Boolean(rule.sources?.[sourceType]);
+    }
+
+    function dockerMirrorSupportsDaemon(mirror) {
+      const rule = getDockerMirrorRule(mirror);
+      return rule ? rule.daemon !== false : true;
+    }
+
     function normalizeGitRepoTarget(target) {
       let t = String(target || '').trim();
       if (!t) return '';
@@ -2342,39 +2467,97 @@
       const sourceNote = renderActionSourceNote(kind, preferred);
 
       if (kind === 'docker') {
-        const top5 = okResults.length
-          ? okResults.slice(0, 5).map(r => r.mirror)
-          : [preferred.mirror];
-        const daemonJson = JSON.stringify({"registry-mirrors": top5}, null, 2);
+        const cfg = readConfig(kind);
+        const rankedMirrors = Array.from(new Set([
+          ...okResults.map(r => r.mirror),
+          ...(cfg.mirrors || [])
+        ].map((mirror) => String(mirror || '').trim()).filter(Boolean)));
+        const daemonMirrors = rankedMirrors.filter((mirror) => dockerMirrorSupportsDaemon(mirror)).slice(0, 5);
+        const daemonJson = JSON.stringify({"registry-mirrors": daemonMirrors}, null, 2);
         el.innerHTML = `
           <div class="action-panel">
             ${sourceNote}
-            <div class="act-title">配置 Docker daemon.json（前 ${top5.length} 名）</div>
+            ${daemonMirrors.length ? `
+            <div class="act-title">配置 Docker daemon.json（Docker Hub 镜像）</div>
             ${renderPathHint({
               linux: '/etc/docker/daemon.json',
               macos: 'Docker Desktop 设置 -> Docker Engine',
-              windows: 'C:\\ProgramData\\docker\\config\\daemon.json'
+              windows: 'C:\\ProgramData\\docker\\config\\daemon.json',
+              note: '仅适用于 Docker Hub 镜像加速'
             })}
             <div class="act-code" id="daemon-json">${esc(daemonJson)}</div>
             <button class="btn-copy" onclick="copyText(document.getElementById('daemon-json').textContent, this)">复制 JSON</button>
+            ` : ''}
             <div class="action-section">
               <div class="act-title">生成 docker pull 命令</div>
               <div class="act-row">
-                <label class="sr-only" for="docker-image-input">Docker 镜像名</label>
-                <input id="docker-image-input" placeholder="输入镜像名，如 nginx:latest" value="" />
+                <div style="min-width:180px;flex:1">
+                  <label class="act-label" for="docker-image-source">镜像仓库</label>
+                  <select id="docker-image-source">
+                    <option value="dockerhub">Docker Hub</option>
+                    <option value="ghcr">ghcr.io</option>
+                    <option value="quay">quay.io</option>
+                    <option value="k8s">registry.k8s.io</option>
+                  </select>
+                </div>
+                <div style="min-width:260px;flex:2">
+                  <label class="act-label" for="docker-image-input">镜像名</label>
+                  <input id="docker-image-input" placeholder="如 nginx:latest 或 user/image:tag" value="homebrew/brew:latest" />
+                </div>
               </div>
+              <div class="muted" id="docker-image-help" style="font-size:12px;margin-bottom:8px"></div>
               <div id="docker-pull-cmds"></div>
             </div>
           </div>
         `;
+        const sourceSelect = document.getElementById('docker-image-source');
         const imgInput = document.getElementById('docker-image-input');
+        const helpEl = document.getElementById('docker-image-help');
         const cmdsEl = document.getElementById('docker-pull-cmds');
+        const sourcePresets = {
+          dockerhub: {
+            value: 'homebrew/brew:latest',
+            placeholder: '如 nginx:latest 或 user/image:tag',
+            help: '普通 Docker Hub 镜像可直接填写镜像名'
+          },
+          ghcr: {
+            value: 'homebrew/brew:latest',
+            placeholder: '如 user/image:tag',
+            help: '将自动生成 ghcr.io/<你的输入>，已接入的多目标代理或 GHCR 专用节点会出现在下方'
+          },
+          quay: {
+            value: 'prometheus/prometheus:latest',
+            placeholder: '如 org/image:tag',
+            help: '将自动生成 quay.io/<你的输入>，仅显示支持 Quay 的镜像源'
+          },
+          k8s: {
+            value: 'pause:3.8',
+            placeholder: '如 pause:3.8',
+            help: '将自动生成 registry.k8s.io/<你的输入>，仅显示支持 Kubernetes 镜像的镜像源'
+          }
+        };
+        const syncDockerInputPreset = () => {
+          const sourceType = sourceSelect.value || 'dockerhub';
+          const preset = sourcePresets[sourceType] || sourcePresets.dockerhub;
+          imgInput.placeholder = preset.placeholder;
+          helpEl.textContent = preset.help;
+          if (!imgInput.value.trim()) imgInput.value = preset.value;
+        };
         const updatePullCmds = () => {
-          const img = imgInput.value.trim();
-          if (!img) { cmdsEl.innerHTML = ''; return; }
+          const sourceType = sourceSelect.value || 'dockerhub';
+          const imageRef = buildDockerImageRef(sourceType, imgInput.value);
+          if (!imageRef) { cmdsEl.innerHTML = ''; return; }
+          const availableMirrors = rankedMirrors
+            .filter((mirror) => dockerMirrorSupportsSource(mirror, sourceType))
+            .map((mirror) => ({ mirror, cmd: buildDockerPullCommand(mirror, sourceType, imageRef) }))
+            .filter((item) => item.cmd)
+            .slice(0, 5);
+          if (!availableMirrors.length) {
+            cmdsEl.innerHTML = `<div class="muted" style="font-size:12px">当前已测速镜像里，没有支持该仓库类型的代理。</div>`;
+            return;
+          }
           let html = '';
-          top5.forEach((m, i) => {
-            const cmd = `docker pull ${m.replace(/^https?:\/\//, '')}/${img}`;
+          availableMirrors.forEach(({ mirror, cmd }) => {
             html += `<div class="act-row" style="margin-top:4px">
               <code class="mono" style="flex:1;font-size:12px">${esc(cmd)}</code>
               <button class="btn-copy" onclick="copyText('${cmd.replace(/'/g,"\\'")}', this)">复制</button>
@@ -2382,7 +2565,14 @@
           });
           cmdsEl.innerHTML = html;
         };
+        sourceSelect.addEventListener('change', () => {
+          imgInput.value = sourcePresets[sourceSelect.value || 'dockerhub']?.value || '';
+          syncDockerInputPreset();
+          updatePullCmds();
+        });
         imgInput.addEventListener('input', updatePullCmds);
+        syncDockerInputPreset();
+        updatePullCmds();
       }
 
       else if (kind === 'github') {
