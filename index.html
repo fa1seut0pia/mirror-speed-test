@@ -3162,7 +3162,8 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
         const fastest = preferredMirrorResult;
         const base = fastest.mirror.replace(/\/+$/, '');
         const repos = `${base}/alpine/latest-stable/main\n${base}/alpine/latest-stable/community`;
-        const cmd = `printf '%s\\n' '${base}/alpine/latest-stable/main' '${base}/alpine/latest-stable/community' | sudo tee /etc/apk/repositories >/dev/null && sudo apk update`;
+        const sedCmd = `sed -i 's|dl-cdn.alpinelinux.org|${base.replace(/^https?:\/\//, '')}|g' /etc/apk/repositories`;
+        const cmd = `sudo ${sedCmd} && sudo apk update`;
         el.innerHTML = `
           <div class="action-panel">
             ${sourceNote}
