@@ -1806,8 +1806,8 @@
       if (okResults.length) return { mirror: okResults[0].mirror, fromResults: true };
 
       const cfg = readConfig(kind);
-      const disabledSet = new Set((cfg.disabled_mirrors || []).map(normalizeMirrorValue));
-      const fallback = (cfg.mirrors || []).find(m => !disabledSet.has(normalizeMirrorValue(m))) || cfg.mirrors[0] || '';
+      const disabledSet = new Set((cfg.disabled_mirrors || []).map((mirror) => normalizeMirrorValue(mirror, kind)));
+      const fallback = (cfg.mirrors || []).find(m => !disabledSet.has(normalizeMirrorValue(m, kind))) || cfg.mirrors[0] || '';
       return { mirror: fallback, fromResults: false };
     }
 
@@ -1953,6 +1953,7 @@
       const cfg = readConfig(kind);
       const mirrors = Array.isArray(cfg?.mirrors) ? cfg.mirrors : [];
       return mirrors.map(mirror => ({
+        kind,
         mirror,
         ok: false,
         pending: true,
@@ -2006,8 +2007,9 @@
 
     function upsertTestResult(results, next) {
       const list = Array.isArray(results) ? results.slice() : [];
-      const target = normalizeMirrorValue(next?.mirror);
-      const idx = list.findIndex(item => normalizeMirrorValue(item?.mirror) === target);
+      const kind = String(next?.kind || '').trim();
+      const target = normalizeMirrorValue(next?.mirror, kind);
+      const idx = list.findIndex(item => normalizeMirrorValue(item?.mirror, kind) === target);
       if (idx >= 0) {
         list[idx] = next;
       } else {
@@ -2029,8 +2031,8 @@
 
     function sortRunningRows(rows, resultMap, pendingSet, disabledSet) {
       return (rows || []).slice().sort((a, b) => {
-        const aKey = normalizeMirrorValue(a?.mirror);
-        const bKey = normalizeMirrorValue(b?.mirror);
+        const aKey = normalizeMirrorValue(a?.mirror, a?.kind);
+        const bKey = normalizeMirrorValue(b?.mirror, b?.kind);
         const aRecord = resultMap.get(aKey);
         const bRecord = resultMap.get(bKey);
         const aDisabled = disabledSet.has(aKey);
@@ -2116,7 +2118,7 @@
 	            ${c.tip ? `<div class="card-tip">${esc(c.tip)}</div>` : ''}
 	            <div class="edit-panel" id="edit-${kind}">
 	              <label for="mirrors-${kind}">镜像地址（每行一个）</label>
-	              <textarea id="mirrors-${kind}">${esc(c.mirrors.join('\n'))}</textarea>
+	              <textarea id="mirrors-${kind}">${esc(renderMirrorTextareaValue(kind, c.mirrors))}</textarea>
 	              <div class="muted" style="font-size:12px;margin-top:6px" id="disabled-${kind}"></div>
 	              <div class="edit-row">
 	                <div><label for="target-${kind}">测试目标</label><input id="target-${kind}" value="${esc(c.target)}" /></div>
@@ -2236,21 +2238,25 @@
 
     function resetKind(kind) {
       const d = defaults[kind];
-      document.getElementById('mirrors-' + kind).value = d.mirrors.join('\n');
+      document.getElementById('mirrors-' + kind).value = renderMirrorTextareaValue(kind, d.mirrors);
       document.getElementById('target-' + kind).value = d.target;
       document.getElementById('mb-' + kind).value = d.sample_mb;
       renderActions(kind, lastResults[kind] || []);
     }
 
     function readConfig(kind) {
+      let mirrors = document.getElementById('mirrors-' + kind).value
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+      if (kind === 'pip') {
+        mirrors = mirrors.map(normalizePipMirrorBase).filter(Boolean);
+      }
       return {
-        mirrors: document.getElementById('mirrors-' + kind).value
-          .split('\n')
-          .map(s => s.trim())
-          .filter(Boolean),
+        mirrors,
         disabled_mirrors: Array.from(new Set(
           ((defaults[kind] && defaults[kind].disabled_mirrors) || [])
-            .map(normalizeMirrorValue)
+            .map((mirror) => normalizeMirrorValue(mirror, kind))
             .filter(Boolean)
         )),
         target: document.getElementById('target-' + kind).value.trim(),
@@ -2258,7 +2264,10 @@
       };
     }
 
-    function normalizeMirrorValue(value) {
+    function normalizeMirrorValue(value, kind = '') {
+      if (kind === 'pip') {
+        return normalizePipMirrorBase(value).replace(/\/+$/, '');
+      }
       return String(value || '').trim().replace(/\/+$/, '');
     }
 
@@ -2271,8 +2280,8 @@
 
     function disableMirror(kind, mirror, btn) {
       if (!defaults[kind]) return;
-      const key = normalizeMirrorValue(mirror);
-      const current = ((defaults[kind].disabled_mirrors || []).map(normalizeMirrorValue));
+      const key = normalizeMirrorValue(mirror, kind);
+      const current = ((defaults[kind].disabled_mirrors || []).map((item) => normalizeMirrorValue(item, kind)));
       if (current.includes(key)) return;
       defaults[kind].disabled_mirrors = Array.from(new Set([...current, key]));
       updateDisabledInfo(kind);
@@ -2311,6 +2320,28 @@
         return mirror.replace('{url}', target).replace('{path}', path);
       }
       return mirror + '/' + target;
+    }
+
+    function normalizePipMirrorBase(mirror) {
+      let value = String(mirror || '').trim().replace(/\/+$/, '');
+      if (value.toLowerCase().endsWith('/simple')) {
+        value = value.slice(0, -'/simple'.length).replace(/\/+$/, '');
+      }
+      return value;
+    }
+
+    function renderPipIndexUrl(mirror) {
+      const base = normalizePipMirrorBase(mirror);
+      return base ? `${base}/simple` : '';
+    }
+
+    function renderMirrorDisplay(kind, mirror) {
+      if (kind === 'pip') return renderPipIndexUrl(mirror);
+      return String(mirror || '').trim();
+    }
+
+    function renderMirrorTextareaValue(kind, mirrors = []) {
+      return mirrors.map((mirror) => renderMirrorDisplay(kind, mirror)).join('\n');
     }
 
     function renderNugetIndexUrl(mirror) {
@@ -2639,13 +2670,14 @@
 
       else if (kind === 'pip') {
         const fastest = preferredMirrorResult;
-        const pipTempCmd = `pip install -i ${fastest.mirror}/simple <package>`;
-        const pipPermCmd = `pip config set global.index-url ${fastest.mirror}/simple`;
-        const uvTempBash = `export UV_INDEX_URL=${fastest.mirror}/simple`;
-        const uvTempPwsh = `$env:UV_INDEX_URL='${fastest.mirror}/simple'`;
-        const uvPermBash = `echo 'export UV_INDEX_URL=${fastest.mirror}/simple' >> ~/.zshrc\necho 'export UV_INDEX_URL=${fastest.mirror}/simple' >> ~/.bashrc`;
-        const uvPermPwsh = `if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force > $null }\nAdd-Content -Path $PROFILE -Value '$env:UV_INDEX_URL="${fastest.mirror}/simple"'`;
-        const uvToml = `[tool.uv]\nindex-url = "${fastest.mirror}/simple"`;
+        const indexUrl = renderPipIndexUrl(fastest.mirror);
+        const pipTempCmd = `pip install -i ${indexUrl} <package>`;
+        const pipPermCmd = `pip config set global.index-url ${indexUrl}`;
+        const uvTempBash = `export UV_INDEX_URL=${indexUrl}`;
+        const uvTempPwsh = `$env:UV_INDEX_URL='${indexUrl}'`;
+        const uvPermBash = `echo 'export UV_INDEX_URL=${indexUrl}' >> ~/.zshrc\necho 'export UV_INDEX_URL=${indexUrl}' >> ~/.bashrc`;
+        const uvPermPwsh = `if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force > $null }\nAdd-Content -Path $PROFILE -Value '$env:UV_INDEX_URL="${indexUrl}"'`;
+        const uvToml = `[tool.uv]\nindex-url = "${indexUrl}"`;
         el.innerHTML = `
           <div class="action-panel">
             ${sourceNote}
@@ -3195,7 +3227,7 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
       const results = data.results || [];
       lastResults[kind] = results;
       const configuredRows = getConfiguredMirrorRows(kind);
-      const pendingSet = new Set((meta.pendingMirrors || []).map(normalizeMirrorValue));
+      const pendingSet = new Set((meta.pendingMirrors || []).map((mirror) => normalizeMirrorValue(mirror, kind)));
 
       const okResults = results.filter(r => r.ok && r.download);
       const probeOnlyResults = results.filter(r => r.probe_only);
@@ -3224,7 +3256,7 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
 
       let html = '';
       const disabledSet = new Set(
-        (((defaults[kind] && defaults[kind].disabled_mirrors) || []).map(normalizeMirrorValue))
+        (((defaults[kind] && defaults[kind].disabled_mirrors) || []).map((mirror) => normalizeMirrorValue(mirror, kind)))
       );
       const renderResultColgroup = () => `
         <colgroup>
@@ -3236,13 +3268,13 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
           <col class="col-actions">
         </colgroup>
       `;
-      const resultMap = new Map(results.map(item => [normalizeMirrorValue(item.mirror), item]));
+      const resultMap = new Map(results.map(item => [normalizeMirrorValue(item.mirror, kind), item]));
 
       if (meta.running) {
         const orderedRows = sortRunningRows(configuredRows, resultMap, pendingSet, disabledSet);
         html += `<table>${renderResultColgroup()}<thead><tr><th>镜像地址</th><th>速度</th><th>延迟</th><th>TTFB</th><th>状态</th><th>操作</th></tr></thead><tbody>`;
         orderedRows.forEach((row) => {
-          const mirrorKey = normalizeMirrorValue(row.mirror);
+          const mirrorKey = normalizeMirrorValue(row.mirror, kind);
           const record = resultMap.get(mirrorKey);
           const errorText = String(record?.error || '失败');
           const isDisabled = disabledSet.has(mirrorKey);
@@ -3281,7 +3313,7 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
           }
 
           html += `<tr data-row-key="${esc(mirrorKey)}">
-            <td class="mono">${esc(row.mirror)}</td>
+            <td class="mono">${esc(renderMirrorDisplay(kind, row.mirror))}</td>
             <td>${speedCell}</td>
             <td>${latencyCell}</td>
             <td>${ttfbCell}</td>
@@ -3321,13 +3353,13 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
             const pct = Math.round((speed / maxSpeed) * 100);
             const ping = r.ping ? r.ping.latency_ms + ' ms' : '-';
             const ttfb = r.download ? r.download.time_to_first_byte_s + 's' : '-';
-            const isDisabled = disabledSet.has(normalizeMirrorValue(r.mirror));
+            const isDisabled = disabledSet.has(normalizeMirrorValue(r.mirror, kind));
             const disableAction = isDisabled
               ? '<span class="muted" style="font-size:12px">已禁用</span>'
               : `<button class="btn-copy btn-disable-mirror" style="margin-right:6px;padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">禁用</button>`;
             const retryAction = `<button class="btn-copy btn-retry-mirror" style="padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">重试</button>`;
             tableHtml += `<tr>
-              <td class="mono">${esc(r.mirror)}</td>
+              <td class="mono">${esc(renderMirrorDisplay(kind, r.mirror))}</td>
               <td>${renderSpeedMetric(`${rank === 0 ? 'TOP ' : ''}${speed} MB/s`, pct)}</td>
               <td>${renderMetricCell(ping)}</td>
               <td>${renderMetricCell(ttfb)}</td>
@@ -3349,14 +3381,14 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
       if (failResults.length) {
         html += `<table>${renderResultColgroup()}<tbody>`;
         failResults.forEach(r => {
-          const isDisabled = disabledSet.has(normalizeMirrorValue(r.mirror));
+          const isDisabled = disabledSet.has(normalizeMirrorValue(r.mirror, kind));
           const disableAction = isDisabled
             ? '<span class="muted" style="font-size:12px">已禁用</span>'
             : `<button class="btn-copy btn-disable-mirror" style="margin-right:6px;padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">禁用</button>`;
           const retryAction = `<button class="btn-copy btn-retry-mirror" style="padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(r.mirror)}">重试</button>`;
           const errorText = String(r.error || '未知错误');
           html += `<tr>
-            <td class="mono">${esc(r.mirror)}</td>
+            <td class="mono">${esc(renderMirrorDisplay(kind, r.mirror))}</td>
             <td colspan="3" class="muted" style="font-size:12px"></td>
             <td class="${isDisabled ? 'muted' : 'fail'}" title="${esc(errorText)}" aria-label="${esc(errorText)}"><span class="status-with-hint">${isDisabled ? '禁用' : '失败'}<span class="status-hint-icon" aria-hidden="true">?</span></span></td>
             <td class="cell-actions">${disableAction}${retryAction}</td>
@@ -3371,7 +3403,7 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
         probeOnlyResults.sort(rankProbeResults).forEach(r => {
           const ping = r.ping ? r.ping.latency_ms + ' ms' : '-';
           html += `<tr>
-            <td class="mono">${esc(r.mirror)}</td>
+            <td class="mono">${esc(renderMirrorDisplay(kind, r.mirror))}</td>
             <td>${renderSpeedMetric('-')}</td>
             <td>${renderMetricCell(ping)}</td>
             <td>${renderMetricCell('-', 'muted')}</td>
@@ -3388,16 +3420,16 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
 
       if (!results.length && configuredRows.length) {
         const disabledSet = new Set(
-          (((defaults[kind] && defaults[kind].disabled_mirrors) || []).map(normalizeMirrorValue))
+          (((defaults[kind] && defaults[kind].disabled_mirrors) || []).map((mirror) => normalizeMirrorValue(mirror, kind)))
         );
         html += `<table>${renderResultColgroup()}<thead><tr><th>镜像地址</th><th>速度</th><th>延迟</th><th>TTFB</th><th>状态</th><th>操作</th></tr></thead><tbody>`;
         configuredRows.forEach((row) => {
-          const isDisabled = disabledSet.has(normalizeMirrorValue(row.mirror));
+          const isDisabled = disabledSet.has(normalizeMirrorValue(row.mirror, kind));
           const disableAction = isDisabled
             ? '<span class="muted" style="font-size:12px">已禁用</span>'
             : `<button class="btn-copy btn-disable-mirror" style="margin-right:6px;padding:4px 8px;font-size:12px" data-kind="${esc(kind)}" data-mirror="${esc(row.mirror)}">禁用</button>`;
           html += `<tr>
-            <td class="mono">${esc(row.mirror)}</td>
+            <td class="mono">${esc(renderMirrorDisplay(kind, row.mirror))}</td>
             <td>${renderSpeedMetric('-')}</td>
             <td>${renderMetricCell('-', 'muted')}</td>
             <td>${renderMetricCell('-', 'muted')}</td>
@@ -3423,16 +3455,17 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
     async function retryMirror(kind, mirror, btn, options = {}) {
       const currentRun = activeRuns[kind];
       if (currentRun && currentRun.running) {
-        appendProgressLog(kind, `当前整卡测速仍在进行，暂不执行单条重试：${mirror}`, 'info');
+        appendProgressLog(kind, `当前整卡测速仍在进行，暂不执行单条重试：${renderMirrorDisplay(kind, mirror)}`, 'info');
         return;
       }
       const cfg = readConfig(kind);
+      document.getElementById('mirrors-' + kind).value = renderMirrorTextareaValue(kind, cfg.mirrors);
       const original = btn ? btn.textContent : '';
       if (btn) {
         btn.disabled = true;
         btn.textContent = '重试中...';
       }
-      appendProgressLog(kind, `单条重试：${mirror}`, 'info');
+      appendProgressLog(kind, `单条重试：${renderMirrorDisplay(kind, mirror)}`, 'info');
       try {
         const resp = await fetch('/api/test', {
           method: 'POST',
@@ -3448,7 +3481,9 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || '请求失败');
         const one = (data.results && data.results[0]) || { kind, mirror, ok: false, error: '无结果' };
-        const merged = (lastResults[kind] || []).filter(item => normalizeMirrorValue(item.mirror) !== normalizeMirrorValue(mirror));
+        const merged = (lastResults[kind] || []).filter(
+          item => normalizeMirrorValue(item.mirror, kind) !== normalizeMirrorValue(mirror, kind)
+        );
         merged.push(one);
         const finalResults = sortTestResults(merged);
         const payload = {
@@ -3493,8 +3528,9 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
         return;
       }
       const cfg = readConfig(kind);
-      const disabledSet = new Set((cfg.disabled_mirrors || []).map(normalizeMirrorValue));
-      const activeMirrors = cfg.mirrors.filter(m => !disabledSet.has(normalizeMirrorValue(m)));
+      document.getElementById('mirrors-' + kind).value = renderMirrorTextareaValue(kind, cfg.mirrors);
+      const disabledSet = new Set((cfg.disabled_mirrors || []).map((mirror) => normalizeMirrorValue(mirror, kind)));
+      const activeMirrors = cfg.mirrors.filter(m => !disabledSet.has(normalizeMirrorValue(m, kind)));
       if (!cfg.mirrors.length) { alert('请填写至少一个镜像地址'); return; }
       if (!activeMirrors.length) { alert('当前镜像都被禁用，请先清空禁用或补充镜像'); return; }
 
@@ -3558,8 +3594,8 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
             liveResults = sortTestResults(upsertTestResult(liveResults, one));
             stageDone += 1;
             done += 1;
-            const completedSet = new Set(stageResults.map(item => normalizeMirrorValue(item.mirror)));
-            const stillPending = pendingMirrors.filter(item => !completedSet.has(normalizeMirrorValue(item)));
+            const completedSet = new Set(stageResults.map(item => normalizeMirrorValue(item.mirror, kind)));
+            const stillPending = pendingMirrors.filter(item => !completedSet.has(normalizeMirrorValue(item, kind)));
             renderResults(kind, { results: liveResults }, { running: true, pendingMirrors: stillPending });
             if (options.probeOnly) {
               if (one.ok) {
@@ -3586,12 +3622,16 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg`;
             }
           }));
           if (runState.aborted) {
-            const remaining = pendingMirrors.filter((mirror) => !stageResults.some(item => normalizeMirrorValue(item.mirror) === normalizeMirrorValue(mirror)));
+            const remaining = pendingMirrors.filter(
+              (mirror) => !stageResults.some(item => normalizeMirrorValue(item.mirror, kind) === normalizeMirrorValue(mirror, kind))
+            );
             remaining.forEach((mirror) => {
               stageResults.push({ kind, mirror, ok: false, error: '已中断' });
             });
             liveResults = sortTestResults([
-              ...liveResults.filter(item => !remaining.some(mirror => normalizeMirrorValue(mirror) === normalizeMirrorValue(item.mirror))),
+              ...liveResults.filter(
+                item => !remaining.some(mirror => normalizeMirrorValue(mirror, kind) === normalizeMirrorValue(item.mirror, kind))
+              ),
               ...remaining.map((mirror) => ({ kind, mirror, ok: false, error: '已中断' }))
             ]);
             renderResults(kind, { results: liveResults }, { running: true, pendingMirrors: [] });

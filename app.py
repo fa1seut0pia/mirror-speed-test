@@ -1287,7 +1287,10 @@ def test_pip_mirror(mirror, target, sample_bytes, probe_only=False):
     result = make_base_result("pip", mirror, target, sample_bytes)
     try:
         package, version = parse_pip_target(target)
-        index_url = urllib.parse.urljoin(f"{mirror.rstrip('/')}/", f"simple/{urllib.parse.quote(package)}/")
+        index_root = render_pip_index_url(mirror)
+        if not index_root:
+            raise MirrorTestError("pip 镜像地址不能为空")
+        index_url = urllib.parse.urljoin(f"{index_root.rstrip('/')}/", f"{urllib.parse.quote(package)}/")
         result["ping"] = ping_url(index_url)
         parser = SimpleIndexParser()
         parser.feed(fetch_text(index_url))
@@ -1787,6 +1790,20 @@ def dedupe_mirrors(mirrors):
         seen.add(value)
         unique_mirrors.append(value)
     return unique_mirrors
+
+
+def normalize_pip_mirror_base(mirror):
+    value = str(mirror or "").strip().rstrip("/")
+    if value.lower().endswith("/simple"):
+        value = value[: -len("/simple")].rstrip("/")
+    return value
+
+
+def render_pip_index_url(mirror):
+    base = normalize_pip_mirror_base(mirror)
+    if not base:
+        return ""
+    return f"{base}/simple"
 
 
 def deep_copy_json(value):
