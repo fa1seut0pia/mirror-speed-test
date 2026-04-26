@@ -6,10 +6,12 @@ import platform
 import re
 import ssl
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -2065,6 +2067,42 @@ class AppHandler(BaseHTTPRequestHandler):
         self._send_json({"error": "not found"}, status=404)
 
 
+def parse_env_bool(name, default=True):
+    value = str(os.environ.get(name, "")).strip().lower()
+    if not value:
+        return default
+    if value in ("1", "true", "yes", "on"):
+        return True
+    if value in ("0", "false", "no", "off"):
+        return False
+    return default
+
+
+def should_auto_open_browser(host):
+    return str(host).strip().lower() in ("127.0.0.1", "localhost", "::1")
+
+
+def _open_browser_worker(url):
+    try:
+        opened = webbrowser.open(url, new=2)
+        if opened:
+            log_info(f"opened browser: {url}")
+        else:
+            log_warn("no available browser, continue without opening UI")
+    except Exception as error:
+        log_warn(f"failed to open browser: {error}")
+
+
+def maybe_open_browser(host, port):
+    if not parse_env_bool("MST_OPEN_BROWSER", default=True):
+        return
+    if not should_auto_open_browser(host):
+        return
+    url = f"http://{host}:{port}"
+    thread = threading.Thread(target=_open_browser_worker, args=(url,), daemon=True)
+    thread.start()
+
+
 def run_server():
     host = str(os.environ.get("MST_HOST", "127.0.0.1")).strip() or "127.0.0.1"
     try:
@@ -2084,7 +2122,9 @@ def run_server():
             if port > 65535:
                 raise RuntimeError("no available port") from error
 
-    log_info(f"listening on http://{host}:{port}")
+    server_url = f"http://{host}:{port}"
+    log_info(f"listening on {server_url}")
+    maybe_open_browser(host, port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
