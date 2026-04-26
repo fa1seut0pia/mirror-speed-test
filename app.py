@@ -2068,9 +2068,9 @@ class AppHandler(BaseHTTPRequestHandler):
 def run_server():
     host = str(os.environ.get("MST_HOST", "127.0.0.1")).strip() or "127.0.0.1"
     try:
-        port = int(str(os.environ.get("MST_PORT", "8080")).strip() or "8080")
+        port = int(str(os.environ.get("MST_PORT", "58080")).strip() or "58080")
     except Exception:
-        port = 8080
+        port = 58080
 
     while True:
         try:

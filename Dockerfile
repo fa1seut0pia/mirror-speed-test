@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     MST_HOST=0.0.0.0 \
-    MST_PORT=8080
+    MST_PORT=58080
 
 WORKDIR /app
 
@@ -18,6 +18,6 @@ RUN useradd --create-home --shell /usr/sbin/nologin appuser \
 
 USER appuser
 
-EXPOSE 8080
+EXPOSE 58080
 
 CMD ["python", "app.py"]

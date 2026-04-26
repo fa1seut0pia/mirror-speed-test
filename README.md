@@ -13,43 +13,41 @@
 
 ## 运行
 
-```bash
-git clone https://github.com/fa1seut0pia/mirror-speed-test.git
-cd mirror-speed-test
-python3 app.py
-```
+从 [Releases](https://github.com/fa1seut0pia/mirror-speed-test/releases) 下载后运行
 
-或者从 [Releases](https://github.com/fa1seut0pia/mirror-speed-test/releases) 下载后运行
+默认监听 `http://127.0.0.1:58080`。
+如果端口被占用，会自动递增尝试下一个可用端口。
 
 Linux/macOS ：
 
 ```bash
 chmod +x mirror-speed-test*
 ./mirror-speed-test-*
+
+# 如需指定端口
+MST_PORT=9000 ./mirror-speed-test-*
 ```
 
 Windows （PowerShell）：
 
 ```powershell
 .\mirror-speed-test-windows-x64.exe
-```
 
-默认监听 `http://127.0.0.1:8080`。
-如果端口被占用，会自动递增尝试下一个可用端口。
+# 如需指定端口
+$env:MST_PORT = "9000"; .\mirror-speed-test-windows-x64.exe
+```
 
 ## Docker
 
-本地构建并运行：
+```bash
+docker run --rm -p 58080:58080 ghcr.io/fa1seut0pia/mirror-speed-test:latest
+```
+
+构建并运行：
 
 ```bash
 docker build -t mirror-speed-test:local .
-docker run --rm -p 8080:8080 mirror-speed-test:local
-```
-
-也可以直接运行 GHCR 镜像：
-
-```bash
-docker run --rm -p 8080:8080 ghcr.io/fa1seut0pia/mirror-speed-test:latest
+docker run --rm -p 58080:58080 mirror-speed-test:local
 ```
 
 ## 可选环境变量
@@ -57,7 +55,16 @@ docker run --rm -p 8080:8080 ghcr.io/fa1seut0pia/mirror-speed-test:latest
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `MST_HOST` | `127.0.0.1` | 监听地址 |
-| `MST_PORT` | `8080` | 监听端口 |
+| `MST_PORT` | `58080` | 监听端口 |
+
+
+## 开发
+
+```bash
+git clone https://github.com/fa1seut0pia/mirror-speed-test.git
+cd mirror-speed-test
+python3 app.py
+```
 
 ## 开源协议
 
@@ -72,4 +79,4 @@ docker run --rm -p 8080:8080 ghcr.io/fa1seut0pia/mirror-speed-test:latest
 
 ## 致谢
 
-特别感谢 [Linux.do](https://linux.do) 社区提供的支持与反馈。
+[Linux.do](https://linux.do)
